@@ -21,6 +21,10 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Lang/en.json" LogicalName="Stellar.WardrobeLoadout.Lang.en.json" />
+    <!-- Row-action icons the overlay font can't provide (trash can, refresh) — white+alpha PNGs,
+         tinted with the theme text colour by the framework. -->
+    <EmbeddedResource Include="Icons/trash.png"   LogicalName="Stellar.WardrobeLoadout.Icons.trash.png" />
+    <EmbeddedResource Include="Icons/refresh.png" LogicalName="Stellar.WardrobeLoadout.Icons.refresh.png" />
   </ItemGroup>
   <!-- The unit-test project is a sibling folder under this repo root; keep its sources out of the
        plugin's default `**/*.cs` glob (else its xUnit test files + generated obj land in the plugin). -->

@@ -245,10 +245,36 @@ public sealed partial class Plugin
 
     private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;
 
-    // Compact glyph-icon button — the label is a single icon glyph from the loc file. The overlay has no
-    // button tooltip, so the icon legend lives in the window help text (wardrobe.window.help).
+    // Row-action icon PNGs the overlay font can't provide (loaded once; framework tints them with MenuText).
+    private static readonly byte[]? TrashIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.Icons.trash.png");
+    private static readonly byte[]? RefreshIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.Icons.refresh.png");
+
+    private static byte[]? LoadEmbeddedIcon(string name)
+    {
+        try
+        {
+            using var s = typeof(Plugin).Assembly.GetManifestResourceStream(name);
+            if (s is null) return null;
+            using var ms = new System.IO.MemoryStream();
+            s.CopyTo(ms);
+            return ms.ToArray();
+        }
+        catch { return null; }
+    }
+
+    // Flat (Bare = no fill/border) glyph-icon button — the label is a single icon glyph from the loc file.
+    // The overlay has no button tooltip, so the icon legend lives in the window help text.
     private ButtonElement IconButton(string locKey, Action onClick, Func<bool>? enabled = null)
-        => new(() => _loc.T(locKey), onClick, Enabled: enabled, Width: 30f);
+        => new(() => _loc.T(locKey), onClick, Enabled: enabled, Style: MenuButtonStyle.Bare, Width: 30f);
+
+    // Flat (Bare) image-icon button — for actions the font has no glyph for (trash, refresh). Empty label
+    // makes it icon-only (centred, sized to match the glyph buttons).
+    private static ButtonElement IconPngButton(byte[]? png, Action onClick, Func<bool>? enabled = null)
+        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Bare, Width: 30f, Icon: () => png);
+
+    // Placeholder for a hidden end-cap reorder arrow (top row has no ▲, last row has no ▼) — keeps the column
+    // aligned without showing an inert button.
+    private static TextElement Empty() => new(() => "");
 
     // A row action is available when the row exists and it is NOT the row currently being renamed (so a
     // reorder / update / delete / apply can't race an in-progress rename edit).
@@ -282,22 +308,26 @@ public sealed partial class Plugin
                 Then: IconButton("wardrobe.window.save", () => CommitRename(idx)),
                 Else: IconButton("wardrobe.window.edit", () => EnterEdit(idx), () => RowAt(idx) is not null)), Width: 32f);
 
-            // Update (⟳): re-capture the worn outfit into this slot. Disabled while renaming this row.
+            // Update — re-capture the worn outfit into this slot (refresh image icon). Disabled while renaming.
             var update = new CellElement(
-                IconButton("wardrobe.window.update", () => OnUpdateRow(idx), () => NotEditingRow(idx)), Width: 32f);
+                IconPngButton(RefreshIcon, () => OnUpdateRow(idx), () => NotEditingRow(idx)), Width: 32f);
 
-            // Reorder ▲ ▼ — move this outfit one slot up / down (changes its hotkey number). Disabled at
-            // the ends, and while renaming this row (so a reorder can't race the edit).
-            var up = new CellElement(
-                IconButton("wardrobe.window.moveUp", () => OnMoveUp(idx), () => idx > 0 && NotEditingRow(idx)), Width: 32f);
-            var down = new CellElement(
-                IconButton("wardrobe.window.moveDown", () => OnMoveDown(idx), () => idx < Rows.Count - 1 && NotEditingRow(idx)), Width: 32f);
+            // Reorder ▲ ▼ — move this outfit one slot up / down (changes its hotkey number). The arrow is
+            // HIDDEN at the ends (no ▲ on the first row, no ▼ on the last) and disabled while renaming.
+            var up = new CellElement(new ConditionalElement(
+                () => idx > 0,
+                Then: IconButton("wardrobe.window.moveUp", () => OnMoveUp(idx), () => NotEditingRow(idx)),
+                Else: Empty()), Width: 32f);
+            var down = new CellElement(new ConditionalElement(
+                () => idx < Rows.Count - 1,
+                Then: IconButton("wardrobe.window.moveDown", () => OnMoveDown(idx), () => NotEditingRow(idx)),
+                Else: Empty()), Width: 32f);
 
-            // Apply (▶) / Delete (✕) — disabled while THIS row is being renamed.
+            // Apply (▶ glyph) / Delete (trash image icon) — disabled while THIS row is being renamed.
             var apply = new CellElement(
                 IconButton("wardrobe.window.apply", () => OnApplyRow(idx), () => NotEditingRow(idx)), Width: 32f);
             var del = new CellElement(
-                IconButton("wardrobe.window.delete", () => OnDeleteRow(idx), () => NotEditingRow(idx)), Width: 32f);
+                IconPngButton(TrashIcon, () => OnDeleteRow(idx), () => NotEditingRow(idx)), Width: 32f);
 
             var row = new RowElement(new HudElement[] { badge, name, pieces, editSave, update, up, down, apply, del }, Gap: 6f);
             // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
