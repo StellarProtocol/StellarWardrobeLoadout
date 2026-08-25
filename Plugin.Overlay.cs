@@ -76,7 +76,7 @@ public sealed partial class Plugin
             OnClose: () => { _window.SetVisiblePersist(false); HidePreview(); }));
 
         _launcherEntry = _services.Launcher.Register(new LauncherEntry(
-            _loc.T("wardrobe.window.title"), IconPng: null, IconKey: null,
+            _loc.T("wardrobe.window.title"), IconPng: LauncherIcon, IconKey: null,
             OnOpen: ToggleOverlay)
         {
             ShouldShow = () => _services.ClientState.Phase == GamePhase.World,
@@ -284,6 +284,9 @@ public sealed partial class Plugin
 
     // Row-action icons — one bold, uniform image set (the overlay font renders most of these poorly at this
     // size). Loaded once from embedded resources; the framework tints each with the theme text colour.
+    // Launcher tile icon (clothes hanger) — replaces the generic puzzle-piece fallback.
+    private static readonly byte[]? LauncherIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.wardrobe-icon.png");
+
     private static byte[]? Icon(string n) => LoadEmbeddedIcon($"Stellar.WardrobeLoadout.Icons.{n}.png");
     private static readonly byte[]? EditIcon = Icon("edit");
     private static readonly byte[]? SaveIcon = Icon("save");        // also the confirm ✓

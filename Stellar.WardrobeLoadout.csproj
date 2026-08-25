@@ -20,7 +20,13 @@
     <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Lang/en.json" LogicalName="Stellar.WardrobeLoadout.Lang.en.json" />
+    <EmbeddedResource Include="Lang/en.json"  LogicalName="Stellar.WardrobeLoadout.Lang.en.json" />
+    <EmbeddedResource Include="Lang/ja.json"  LogicalName="Stellar.WardrobeLoadout.Lang.ja.json" />
+    <EmbeddedResource Include="Lang/th.json"  LogicalName="Stellar.WardrobeLoadout.Lang.th.json" />
+    <EmbeddedResource Include="Lang/id.json"  LogicalName="Stellar.WardrobeLoadout.Lang.id.json" />
+    <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.WardrobeLoadout.Lang.fil.json" />
+    <!-- Launcher tile icon (clothes hanger) — white+alpha, tinted by the launcher. -->
+    <EmbeddedResource Include="wardrobe-icon.png" LogicalName="Stellar.WardrobeLoadout.wardrobe-icon.png" />
     <!-- Row-action icons — one bold uniform set (white+alpha PNGs, tinted with the theme text colour by
          the framework). The overlay font can't provide most of these cleanly at this size/weight. -->
     <EmbeddedResource Include="Icons/edit.png"    LogicalName="Stellar.WardrobeLoadout.Icons.edit.png" />

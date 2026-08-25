@@ -1,0 +1,22 @@
+{
+  "wardrobe.hotkey.apply": "衣装{0}を適用",
+  "wardrobe.hotkey.windowToggle": "ワードローブを開く",
+  "wardrobe.toast.apiNotReady": "ワードローブはまだ準備中です",
+  "wardrobe.toast.noSlot": "スロット{0}に保存された衣装がありません",
+  "wardrobe.toast.inProgress": "衣装の切り替えを実行中です",
+  "wardrobe.toast.captureEmpty": "保存する装備がありません",
+  "wardrobe.toast.saved": "衣装「{0}」を保存しました",
+  "wardrobe.toast.updated": "「{0}」を現在の衣装で更新しました",
+  "wardrobe.toast.applied": "「{0}」に切り替えました",
+  "wardrobe.toast.applyFailed": "「{0}」を適用できませんでした",
+  "wardrobe.window.title": "ワードローブ",
+  "wardrobe.window.saveCurrent": "現在の衣装を保存",
+  "wardrobe.window.confirmUpdate": "上書き？",
+  "wardrobe.window.confirmDelete": "削除？",
+  "wardrobe.window.pieces": "{0}点",
+  "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.previewLabel": "プレビュー（行にカーソル）",
+  "wardrobe.window.empty": "保存された衣装はまだありません。ゲーム内で着替えてから「現在の衣装を保存」をクリックしてください。",
+  "wardrobe.window.defaultName": "衣装{0}",
+  "wardrobe.window.help": "着ている衣装を保存し、ホットキー（最初の8スロット）または再生ボタンで即座に切り替えます。行のボタン：名前変更、現在の衣装で更新、上へ、下へ、適用、削除。更新と削除は確認を求めます。衣装はキャラクターごとに保存されます。"
+}
