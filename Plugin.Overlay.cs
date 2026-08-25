@@ -23,6 +23,24 @@ public sealed partial class Plugin
     private IDisposable? _launcherEntry;
     private IReadOnlyList<OutfitSlot> _rows = Array.Empty<OutfitSlot>();
 
+    // Inline rename edit state. The name is a LABEL by default; clicking Edit turns THAT row into an
+    // input field (Save/Enter commits it and returns to a label). _editBuffer is kept live by the
+    // input's OnChange so the Save button can read the typed value without an Enter first (the framework
+    // InputElement fires Submit only on Enter/blur — see Stellar.Infrastructure LayoutPanel).
+    private int _editingIdx = -1;
+    private string _editBuffer = "";
+
+    // Hover-to-preview state. Hovering a row arms a debounced 3D preview (re-dressing the model loads each
+    // cosmetic's assets, so a short settle avoids thrash when sweeping the mouse). _previewIdx is the outfit
+    // currently shown (also highlights that row).
+    private const int PreviewW = 240;
+    private const int PreviewH = 460;
+    private const long HoverDebounceTicks = 8;   // ~130 ms before the hovered outfit loads
+    private long _tick;
+    private int _hoverPendingIdx = -1;
+    private long _hoverDeadline;
+    private int _previewIdx = -1;
+
     private void InitOverlay()
     {
         RefreshRows();
@@ -31,9 +49,9 @@ public sealed partial class Plugin
             new WindowSpec(
                 Id:          "wardrobeloadout.window",
                 Title:       _loc.T("wardrobe.window.title"),
-                // Column budget: 28 badge + 150 name + 64 pieces + 64 apply + 48 top + 56 delete + 5×6
-                // gaps = 440, + GlassMenu body padding (24) + scrollbar inset (9) + margin.
-                DefaultRect: new WindowRect(20f, 120f, 520f, 0f),
+                // 540 list column (454 row budget + scroll inset) + 8 gap + 248 preview pane + GlassMenu
+                // body padding (24) + margin.
+                DefaultRect: new WindowRect(20f, 120f, 840f, 0f),
                 Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.GlassMenu)
             {
@@ -43,7 +61,7 @@ public sealed partial class Plugin
                                      && (_services.ClientState.UiState & GameUIState.Loading) == 0,
             },
             BuildRoot(),
-            OnClose: () => _window.SetVisiblePersist(false)));
+            OnClose: () => { _window.SetVisiblePersist(false); HidePreview(); }));
 
         _launcherEntry = _services.Launcher.Register(new LauncherEntry(
             _loc.T("wardrobe.window.title"), IconPng: null, IconKey: null,
@@ -54,11 +72,15 @@ public sealed partial class Plugin
         });
 
         _services.ClientState.Login += RefreshRows;
+        _services.WardrobePreview.SetViewport(PreviewW, PreviewH);
+        _services.Framework.Update += OnPreviewTick;
     }
 
     private void DisposeOverlay()
     {
+        _services.Framework.Update -= OnPreviewTick;
         _services.ClientState.Login -= RefreshRows;
+        HidePreview();
         try { _launcherEntry?.Dispose(); } catch { /* disposal must not throw */ }
         try { _window?.Remove(); } catch { /* disposal must not throw */ }
     }
@@ -67,7 +89,44 @@ public sealed partial class Plugin
     private void ToggleOverlay()
     {
         if (_window is null) return;
-        _window.SetVisiblePersist(!_window.IsShown);
+        var show = !_window.IsShown;
+        _window.SetVisiblePersist(show);
+        if (!show) HidePreview();
+    }
+
+    // Row hover-enter arms a debounced preview; hover-leave keeps the last preview (no flicker moving
+    // between rows). The actual load fires from OnPreviewTick once the hover settles.
+    private void OnRowHover(int idx, bool entered)
+    {
+        if (!entered) return;
+        _hoverPendingIdx = idx;
+        _hoverDeadline = _tick + HoverDebounceTicks;
+    }
+
+    // Debounce tick (framework Update). When a hovered row has settled, load its 3D preview.
+    private void OnPreviewTick(float dt)
+    {
+        _tick++;
+        if (_hoverPendingIdx < 0 || _tick < _hoverDeadline) return;
+        var idx = _hoverPendingIdx;
+        _hoverPendingIdx = -1;
+        ShowPreview(idx);
+    }
+
+    private void ShowPreview(int idx)
+    {
+        if (idx == _previewIdx) return;   // already showing this outfit
+        if (RowAt(idx) is not { } slot) return;
+        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions);
+        _previewIdx = idx;
+        _window?.MarkDirty();
+    }
+
+    private void HidePreview()
+    {
+        _hoverPendingIdx = -1;
+        _previewIdx = -1;
+        try { _services.WardrobePreview.Hide(); } catch { /* never throw */ }
     }
 
     // Re-read the current character's outfits into the display cache, then repaint. Called after every
@@ -85,11 +144,29 @@ public sealed partial class Plugin
         if (SaveCurrentOutfit()) RefreshRows();
     }
 
-    private void OnRenameRow(int idx, string newName)
+    // Turn the row's name into an editable field, seeded with the current name.
+    private void EnterEdit(int idx)
     {
-        if (RowAt(idx) is null || string.IsNullOrWhiteSpace(newName)) return;
-        if (_store.Rename(CharacterKey, idx, newName.Trim())) { Persist(); RefreshRows(); }
+        if (RowAt(idx) is not { } slot) return;
+        _editingIdx = idx;
+        _editBuffer = slot.Name;
+        _window?.MarkDirty();
     }
+
+    // Persist the edited name (from the live _editBuffer) and return the row to a label. Called by the
+    // Save button AND by the input's Enter/blur Submit — both go through here so they can't disagree.
+    private void CommitRename(int idx)
+    {
+        var name = _editBuffer?.Trim() ?? "";
+        if (name.Length > 0 && RowAt(idx) is not null && _store.Rename(CharacterKey, idx, name))
+        {
+            Persist();
+        }
+        _editingIdx = -1;
+        RefreshRows();
+    }
+
+    private bool IsEditing(int idx) => _editingIdx == idx;
 
     private void OnApplyRow(int idx)
     {
@@ -125,30 +202,45 @@ public sealed partial class Plugin
                 () => idx < HotkeySlotCount && RowAt(idx) is not null ? _loc.TFormat("wardrobe.window.hotkeyBadge", idx + 1) : "",
                 Muted, NoWrap: true), Width: 28f);
 
-            var name = new CellElement(new InputElement(
-                () => RowAt(idx)?.Name ?? "",
-                v => OnRenameRow(idx, v), Width: 150f), Width: 150f);
+            // Name: a LABEL by default; the row being edited swaps to an input field (same width).
+            var name = new CellElement(new ConditionalElement(
+                () => IsEditing(idx),
+                Then: new InputElement(() => _editBuffer, _ => CommitRename(idx), Width: 130f, OnChange: s => _editBuffer = s),
+                Else: new TextElement(() => RowAt(idx)?.Name ?? "", NoWrap: true)), Width: 130f);
+
+            // Edit ↔ Save toggle for that row.
+            var editSave = new CellElement(new ConditionalElement(
+                () => IsEditing(idx),
+                Then: new ButtonElement(() => _loc.T("wardrobe.window.save"), () => CommitRename(idx), Width: 44f),
+                Else: new ButtonElement(() => _loc.T("wardrobe.window.edit"), () => EnterEdit(idx),
+                    Enabled: () => RowAt(idx) is not null, Width: 44f)), Width: 48f);
 
             var pieces = new CellElement(new TextElement(
                 () => RowAt(idx) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
-                Muted, NoWrap: true), Width: 64f);
+                Muted, NoWrap: true), Width: 56f);
 
+            // Apply / Top / Delete are disabled while THIS row is being renamed (so a reorder/delete
+            // can't race the edit — the bug where moving a row reverted the new name).
             var apply = new CellElement(new ButtonElement(
                 () => _loc.T("wardrobe.window.apply"),
                 () => OnApplyRow(idx),
-                Enabled: () => RowAt(idx) is not null, Width: 60f), Width: 64f);
+                Enabled: () => RowAt(idx) is not null && !IsEditing(idx), Width: 56f), Width: 60f);
 
             var top = new CellElement(new ButtonElement(
                 () => _loc.T("wardrobe.window.moveTop"),
                 () => OnMoveTopRow(idx),
-                Enabled: () => idx > 0 && RowAt(idx) is not null, Width: 44f), Width: 48f);
+                Enabled: () => idx > 0 && RowAt(idx) is not null && !IsEditing(idx), Width: 40f), Width: 44f);
 
             var del = new CellElement(new ButtonElement(
                 () => _loc.T("wardrobe.window.delete"),
                 () => OnDeleteRow(idx),
-                Enabled: () => RowAt(idx) is not null, Width: 52f), Width: 56f);
+                Enabled: () => RowAt(idx) is not null && !IsEditing(idx), Width: 48f), Width: 52f);
 
-            pool[idx] = new RowElement(new HudElement[] { badge, name, pieces, apply, top, del }, Gap: 6f);
+            var row = new RowElement(new HudElement[] { badge, name, editSave, pieces, apply, top, del }, Gap: 6f);
+            // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
+            // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
+            pool[idx] = new SelectableElement(row, OnClick: () => { },
+                Selected: () => _previewIdx == idx, OnHover: on => OnRowHover(idx, on));
         }
         return pool;
     }
@@ -164,12 +256,28 @@ public sealed partial class Plugin
 
         var list = new ConditionalElement(
             () => _rows.Count > 0,
-            Then: new ScrollElement(new ListElement(() => _rows.Count, pool, Columns: 1), Height: 300f),
+            Then: new ScrollElement(new ListElement(() => _rows.Count, pool, Columns: 1), Height: 460f),
             Else: new TextElement(() => _loc.T("wardrobe.window.empty"), Muted));
+
+        // 3D preview pane (right): shows the hovered outfit on a live self model; drag to rotate.
+        var previewPane = new ColumnElement(new HudElement[]
+        {
+            new TextElement(() => _loc.T("wardrobe.window.previewLabel"), Muted),
+            new RenderTextureHostElement(
+                () => _services.WardrobePreview.Texture, PreviewW, PreviewH,
+                OnDrag: (dx, dy) => _services.WardrobePreview.Orbit(dx, dy),
+                OnViewportResize: (w, h) => _services.WardrobePreview.SetViewport(w, h)),
+        }, Gap: 4f);
+
+        var listAndPreview = new RowElement(new HudElement[]
+        {
+            new CellElement(list, Width: 540f),
+            new CellElement(previewPane, Width: PreviewW + 8f),
+        }, Gap: 8f);
 
         return new ColumnElement(new HudElement[]
         {
-            help, new SeparatorElement(), saveButton, new SeparatorElement(), list,
+            help, new SeparatorElement(), saveButton, new SeparatorElement(), listAndPreview,
         }, Gap: 8f);
     }
 }
