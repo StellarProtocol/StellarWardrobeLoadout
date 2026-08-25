@@ -235,8 +235,10 @@ public sealed partial class Plugin
             var row = new RowElement(new HudElement[] { badge, name, editSave, pieces, apply, top, del }, Gap: 6f);
             // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
             // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
-            pool[idx] = new SelectableElement(row, OnClick: () => { },
-                Selected: () => _previewIdx == idx, OnHover: on => OnRowHover(idx, on));
+            pool[idx] = new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == idx)
+            {
+                OnHover = on => OnRowHover(idx, on),
+            };
         }
         return pool;
     }
