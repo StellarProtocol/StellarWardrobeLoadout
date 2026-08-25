@@ -307,10 +307,11 @@ public sealed partial class Plugin
         catch { return null; }
     }
 
-    // Compact toolbar-chip icon button (Glass = faint fill + thin accent border), icon-only. Empty label →
-    // the framework centres the PNG and sizes the button to it.
+    // Compact toolbar-chip icon button, icon-only. Outline style = a defined accent border with a
+    // near-transparent interior, so the (light) icon sits on the DARK row for high contrast — a light Glass
+    // fill washes the icon out on a dark theme ("blended in"). Empty label → the framework centres the PNG.
     private static ButtonElement IconChip(byte[]? png, Action onClick, Func<bool>? enabled = null)
-        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Glass, Width: 30f, Icon: () => png);
+        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Outline, Width: 30f, Icon: () => png);
 
     // Placeholder for a hidden end-cap reorder arrow (top row has no up, last row no down) — keeps the
     // column aligned without showing an inert button.
