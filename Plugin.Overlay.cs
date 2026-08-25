@@ -118,7 +118,10 @@ public sealed partial class Plugin
     {
         if (idx == _previewIdx) return;   // already showing this outfit
         if (RowAt(idx) is not { } slot) return;
-        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions);
+        // Prefer the dyes captured with the outfit; for outfits saved before dye-capture existed, fall back
+        // to the live worn dyes so they still show colour (correct when the previewed outfit is the worn one).
+        var dyes = slot.Dyes.Count > 0 ? (IReadOnlyDictionary<int, float[]>)slot.Dyes : CaptureDyes();
+        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions, dyes);
         _previewIdx = idx;
         _window?.MarkDirty();
     }

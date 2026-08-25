@@ -172,12 +172,38 @@ public sealed partial class Plugin : IStellarPlugin
         {
             Name = name,
             Regions = new Dictionary<int, int>(worn),
+            Dyes = CaptureDyes(),
             SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         });
         Persist();
         DiagSaved(name, worn);
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", name));
         return true;
+    }
+
+    // Capture the worn dye colours per region from IEntityDetail.GetFashion (the attr-201 broadcast the
+    // Entity Inspector reads) — region → flattened RGB triples (each channel 0..1). Best-effort: any failure
+    // just yields no dyes (the piece previews in its default colour).
+    private Dictionary<int, float[]> CaptureDyes()
+    {
+        var dyes = new Dictionary<int, float[]>();
+        try
+        {
+            foreach (var fe in _services.EntityDetail.GetFashion(_services.CombatSnapshot.LocalEntityId))
+            {
+                if (fe.Dyes.Length == 0) continue;
+                var flat = new float[fe.Dyes.Length * 3];
+                for (var i = 0; i < fe.Dyes.Length; i++)
+                {
+                    flat[i * 3] = fe.Dyes[i].R;
+                    flat[i * 3 + 1] = fe.Dyes[i].G;
+                    flat[i * 3 + 2] = fe.Dyes[i].B;
+                }
+                dyes[fe.Slot] = flat;
+            }
+        }
+        catch { /* dyes are best-effort */ }
+        return dyes;
     }
 
     private static bool AllEmpty(IReadOnlyDictionary<int, int> outfit)
