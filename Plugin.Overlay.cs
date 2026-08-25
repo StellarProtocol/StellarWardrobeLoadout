@@ -10,8 +10,8 @@ namespace Stellar.WardrobeLoadout;
 /// character's saved outfits — each row shows its hotkey badge (H1..H8 for the first 8), an editable
 /// name, its piece count, and Apply / Top (move-to-first) / Delete controls. Storage + apply logic
 /// live in <see cref="Plugin"/> (<c>Plugin.cs</c> / <see cref="WardrobeStore"/>); this partial is
-/// presentation only. The displayed list is cached in <see cref="_rows"/> and refreshed on every
-/// mutation and on login (character switch) — never re-read inside a poll-diffed row func.
+/// presentation only. The list is read LIVE from the store (see <c>Rows</c>) so it always reflects the
+/// current character's outfits, even before the character name resolves at boot.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -21,7 +21,12 @@ public sealed partial class Plugin
 
     private IWindowControl _window = null!;
     private IDisposable? _launcherEntry;
-    private IReadOnlyList<OutfitSlot> _rows = Array.Empty<OutfitSlot>();
+
+    // The displayed list is read LIVE from the store each frame (keyed by the current character), NOT
+    // cached — so it always reflects the right character's outfits even before the character name resolves
+    // at boot (the old cache read the empty "default" bucket at construction → list looked empty until a
+    // save forced a refresh). A store read is a cheap dict lookup; the overlay only renders when open.
+    private IReadOnlyList<OutfitSlot> Rows => _store.Get(CharacterKey);
 
     // Inline rename edit state. The name is a LABEL by default; clicking Edit turns THAT row into an
     // input field (Save/Enter commits it and returns to a label). _editBuffer is kept live by the
@@ -43,8 +48,6 @@ public sealed partial class Plugin
 
     private void InitOverlay()
     {
-        RefreshRows();
-
         _window = _services.Windows.Register(new WindowRegistration(
             new WindowSpec(
                 Id:          "wardrobeloadout.window",
@@ -71,7 +74,6 @@ public sealed partial class Plugin
             TitleProvider = () => _loc.T("wardrobe.window.title"),
         });
 
-        _services.ClientState.Login += RefreshRows;
         _services.WardrobePreview.SetViewport(PreviewW, PreviewH);
         _services.Framework.Update += OnPreviewTick;
     }
@@ -79,7 +81,6 @@ public sealed partial class Plugin
     private void DisposeOverlay()
     {
         _services.Framework.Update -= OnPreviewTick;
-        _services.ClientState.Login -= RefreshRows;
         HidePreview();
         try { _launcherEntry?.Dispose(); } catch { /* disposal must not throw */ }
         try { _window?.Remove(); } catch { /* disposal must not throw */ }
@@ -129,19 +130,14 @@ public sealed partial class Plugin
         try { _services.WardrobePreview.Hide(); } catch { /* never throw */ }
     }
 
-    // Re-read the current character's outfits into the display cache, then repaint. Called after every
-    // mutation (save/rename/delete/reorder) and on login (character switch).
-    private void RefreshRows()
-    {
-        _rows = _store.Get(CharacterKey);
-        _window?.MarkDirty();
-    }
+    // Force an immediate repaint after a mutation (the list itself is read live via Rows).
+    private void Repaint() => _window?.MarkDirty();
 
-    private OutfitSlot? RowAt(int i) => i < _rows.Count ? _rows[i] : null;
+    private OutfitSlot? RowAt(int i) { var r = Rows; return i < r.Count ? r[i] : null; }
 
     private void OnSaveCurrent()
     {
-        if (SaveCurrentOutfit()) RefreshRows();
+        if (SaveCurrentOutfit()) Repaint();
     }
 
     // Turn the row's name into an editable field, seeded with the current name.
@@ -163,7 +159,7 @@ public sealed partial class Plugin
             Persist();
         }
         _editingIdx = -1;
-        RefreshRows();
+        Repaint();
     }
 
     private bool IsEditing(int idx) => _editingIdx == idx;
@@ -181,12 +177,12 @@ public sealed partial class Plugin
 
     private void OnMoveTopRow(int idx)
     {
-        if (_store.MoveToTop(CharacterKey, idx)) { Persist(); RefreshRows(); }
+        if (_store.MoveToTop(CharacterKey, idx)) { Persist(); Repaint(); }
     }
 
     private void OnDeleteRow(int idx)
     {
-        if (_store.Delete(CharacterKey, idx)) { Persist(); RefreshRows(); }
+        if (_store.Delete(CharacterKey, idx)) { Persist(); Repaint(); }
     }
 
     private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;
@@ -255,8 +251,8 @@ public sealed partial class Plugin
             () => _loc.T("wardrobe.window.saveCurrent"), OnSaveCurrent, Width: 200f);
 
         var list = new ConditionalElement(
-            () => _rows.Count > 0,
-            Then: new ScrollElement(new ListElement(() => _rows.Count, pool, Columns: 1), Height: 460f),
+            () => Rows.Count > 0,
+            Then: new ScrollElement(new ListElement(() => Rows.Count, pool, Columns: 1), Height: 460f),
             Else: new TextElement(() => _loc.T("wardrobe.window.empty"), Muted));
 
         // 3D preview pane (right): shows the hovered outfit on a live self model; drag to rotate.
