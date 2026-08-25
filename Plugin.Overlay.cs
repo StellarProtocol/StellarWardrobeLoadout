@@ -209,10 +209,34 @@ public sealed partial class Plugin
         ApplyOutfit(slot);
     }
 
-    private void OnMoveTopRow(int idx)
+    // Re-capture the outfit the player is WEARING now into this slot (keeps its name + position, and
+    // refreshes its dyes to exact per-area). Same guards as Save current outfit.
+    private void OnUpdateRow(int idx)
     {
-        if (_store.MoveToTop(CharacterKey, idx)) { Persist(); Repaint(); }
+        if (RowAt(idx) is not { } slot) return;
+        if (!_services.Wardrobe.IsAvailable)
+        {
+            Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.apiNotReady"));
+            return;
+        }
+        var worn = _services.Wardrobe.GetWornOutfit();
+        if (worn is null || AllEmpty(worn))
+        {
+            Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.captureEmpty"));
+            return;
+        }
+        if (_store.Update(CharacterKey, idx, new Dictionary<int, int>(worn), CaptureDyeAreas(),
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))
+        {
+            Persist();
+            DiagUpdated(slot.Name, worn);
+            Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.updated", slot.Name));
+            Repaint();
+        }
     }
+
+    private void OnMoveUp(int idx)   { if (_store.Move(CharacterKey, idx, -1)) { Persist(); Repaint(); } }
+    private void OnMoveDown(int idx) { if (_store.Move(CharacterKey, idx, +1)) { Persist(); Repaint(); } }
 
     private void OnDeleteRow(int idx)
     {
@@ -220,6 +244,15 @@ public sealed partial class Plugin
     }
 
     private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;
+
+    // Compact glyph-icon button — the label is a single icon glyph from the loc file. The overlay has no
+    // button tooltip, so the icon legend lives in the window help text (wardrobe.window.help).
+    private ButtonElement IconButton(string locKey, Action onClick, Func<bool>? enabled = null)
+        => new(() => _loc.T(locKey), onClick, Enabled: enabled, Width: 30f);
+
+    // A row action is available when the row exists and it is NOT the row currently being renamed (so a
+    // reorder / update / delete / apply can't race an in-progress rename edit).
+    private bool NotEditingRow(int idx) => RowAt(idx) is not null && !IsEditing(idx);
 
     private HudElement[] BuildRowPool()
     {
@@ -232,41 +265,41 @@ public sealed partial class Plugin
                 () => idx < HotkeySlotCount && RowAt(idx) is not null ? _loc.TFormat("wardrobe.window.hotkeyBadge", idx + 1) : "",
                 Muted, NoWrap: true), Width: 28f);
 
-            // Name: a LABEL by default; the row being edited swaps to an input field (same width).
+            // Name: a LABEL by default; the row being edited swaps to an input field (same width). Wider
+            // than before — the icon buttons freed the space, so long outfit names read fully.
             var name = new CellElement(new ConditionalElement(
                 () => IsEditing(idx),
-                Then: new InputElement(() => _editBuffer, _ => CommitRename(idx), Width: 130f, OnChange: s => _editBuffer = s),
-                Else: new TextElement(() => RowAt(idx)?.Name ?? "", NoWrap: true)), Width: 130f);
-
-            // Edit ↔ Save toggle for that row.
-            var editSave = new CellElement(new ConditionalElement(
-                () => IsEditing(idx),
-                Then: new ButtonElement(() => _loc.T("wardrobe.window.save"), () => CommitRename(idx), Width: 44f),
-                Else: new ButtonElement(() => _loc.T("wardrobe.window.edit"), () => EnterEdit(idx),
-                    Enabled: () => RowAt(idx) is not null, Width: 44f)), Width: 48f);
+                Then: new InputElement(() => _editBuffer, _ => CommitRename(idx), Width: 178f, OnChange: s => _editBuffer = s),
+                Else: new TextElement(() => RowAt(idx)?.Name ?? "", NoWrap: true)), Width: 180f);
 
             var pieces = new CellElement(new TextElement(
                 () => RowAt(idx) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
-                Muted, NoWrap: true), Width: 56f);
+                Muted, NoWrap: true), Width: 40f);
 
-            // Apply / Top / Delete are disabled while THIS row is being renamed (so a reorder/delete
-            // can't race the edit — the bug where moving a row reverted the new name).
-            var apply = new CellElement(new ButtonElement(
-                () => _loc.T("wardrobe.window.apply"),
-                () => OnApplyRow(idx),
-                Enabled: () => RowAt(idx) is not null && !IsEditing(idx), Width: 56f), Width: 60f);
+            // Edit ↔ Save (rename) — ✎ / ✓ icons.
+            var editSave = new CellElement(new ConditionalElement(
+                () => IsEditing(idx),
+                Then: IconButton("wardrobe.window.save", () => CommitRename(idx)),
+                Else: IconButton("wardrobe.window.edit", () => EnterEdit(idx), () => RowAt(idx) is not null)), Width: 32f);
 
-            var top = new CellElement(new ButtonElement(
-                () => _loc.T("wardrobe.window.moveTop"),
-                () => OnMoveTopRow(idx),
-                Enabled: () => idx > 0 && RowAt(idx) is not null && !IsEditing(idx), Width: 40f), Width: 44f);
+            // Update (⟳): re-capture the worn outfit into this slot. Disabled while renaming this row.
+            var update = new CellElement(
+                IconButton("wardrobe.window.update", () => OnUpdateRow(idx), () => NotEditingRow(idx)), Width: 32f);
 
-            var del = new CellElement(new ButtonElement(
-                () => _loc.T("wardrobe.window.delete"),
-                () => OnDeleteRow(idx),
-                Enabled: () => RowAt(idx) is not null && !IsEditing(idx), Width: 48f), Width: 52f);
+            // Reorder ▲ ▼ — move this outfit one slot up / down (changes its hotkey number). Disabled at
+            // the ends, and while renaming this row (so a reorder can't race the edit).
+            var up = new CellElement(
+                IconButton("wardrobe.window.moveUp", () => OnMoveUp(idx), () => idx > 0 && NotEditingRow(idx)), Width: 32f);
+            var down = new CellElement(
+                IconButton("wardrobe.window.moveDown", () => OnMoveDown(idx), () => idx < Rows.Count - 1 && NotEditingRow(idx)), Width: 32f);
 
-            var row = new RowElement(new HudElement[] { badge, name, editSave, pieces, apply, top, del }, Gap: 6f);
+            // Apply (▶) / Delete (✕) — disabled while THIS row is being renamed.
+            var apply = new CellElement(
+                IconButton("wardrobe.window.apply", () => OnApplyRow(idx), () => NotEditingRow(idx)), Width: 32f);
+            var del = new CellElement(
+                IconButton("wardrobe.window.delete", () => OnDeleteRow(idx), () => NotEditingRow(idx)), Width: 32f);
+
+            var row = new RowElement(new HudElement[] { badge, name, pieces, editSave, update, up, down, apply, del }, Gap: 6f);
             // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
             // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
             pool[idx] = new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == idx)

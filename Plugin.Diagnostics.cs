@@ -30,6 +30,12 @@ public sealed partial class Plugin
         _services.Log.Info($"[WardrobeLoadout] saved '{name}' ({Worn(worn)} worn) for {CharacterKey}");
     }
 
+    private void DiagUpdated(string name, IReadOnlyDictionary<int, int> worn)
+    {
+        if (!StellarDiagnostics.IsEnabled) return;
+        _services.Log.Info($"[WardrobeLoadout] updated '{name}' -> current outfit ({Worn(worn)} worn) for {CharacterKey}");
+    }
+
     // Log the per-area dyes chosen for a preview as region:{area=RRGGBB …} so a test can confirm each
     // colour landed on its real EFashionColorAreaType area (Base1-4=1-4, Socks1-4=5-8, BaseEx=9-12,
     // UnderWear=13-16) — the hex matches what the Entity Inspector shows for the worn piece.

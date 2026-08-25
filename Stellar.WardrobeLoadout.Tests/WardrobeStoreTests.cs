@@ -71,16 +71,46 @@ public sealed class WardrobeStoreTests
     }
 
     [Fact]
-    public void MoveToTop_reorders_to_slot_one()
+    public void Move_reorders_up_and_down()
     {
         var store = new WardrobeStore();
         store.Add("Aria", Slot("a"));
         store.Add("Aria", Slot("b"));
         store.Add("Aria", Slot("c"));
 
-        Assert.True(store.MoveToTop("Aria", 2));   // move "c" to front
+        Assert.True(store.Move("Aria", 2, -1));    // "c" up one
+        Assert.Equal(new[] { "a", "c", "b" }, Names(store.Get("Aria")));
+        Assert.True(store.Move("Aria", 0, +1));    // "a" down one
         Assert.Equal(new[] { "c", "a", "b" }, Names(store.Get("Aria")));
-        Assert.False(store.MoveToTop("Aria", 0));   // already first
+        Assert.False(store.Move("Aria", 0, -1));   // already first — no-op
+        Assert.False(store.Move("Aria", 2, +1));   // already last — no-op
+        Assert.False(store.Move("Aria", 9, -1));   // out of range
+    }
+
+    [Fact]
+    public void Update_recaptures_in_place_keeping_name_and_position()
+    {
+        var store = new WardrobeStore();
+        store.Add("Aria", Slot("keep-me", (701, 55)));
+        store.Add("Aria", Slot("other", (702, 10)));
+        store.Get("Aria")[0].Dyes[701] = new[] { 0.1f, 0.2f, 0.3f };   // legacy flat present
+
+        var regions = new Dictionary<int, int> { [701] = 99, [703] = 77 };
+        var dyeAreas = new Dictionary<int, Dictionary<int, float[]>>
+        {
+            [701] = new() { [3] = new[] { 0.5f, 0.25f, 0.75f } },
+        };
+        Assert.True(store.Update("Aria", 0, regions, dyeAreas, 2000));
+
+        var slot = store.Get("Aria")[0];
+        Assert.Equal("keep-me", slot.Name);                 // name preserved
+        Assert.Equal(99, slot.Regions[701]);                // outfit overwritten
+        Assert.Equal(77, slot.Regions[703]);
+        Assert.Equal(2000, slot.SavedAtMs);
+        Assert.Equal(0.25f, slot.DyeAreas[701][3][1], 5);   // per-area dyes stored
+        Assert.Empty(slot.Dyes);                            // legacy flat cleared
+        Assert.Equal("other", store.Get("Aria")[1].Name);   // position preserved
+        Assert.False(store.Update("Aria", 9, regions, dyeAreas, 1));   // out of range
     }
 
     [Fact]
