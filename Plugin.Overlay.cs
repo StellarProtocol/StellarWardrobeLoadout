@@ -35,6 +35,13 @@ public sealed partial class Plugin
     private int _editingIdx = -1;
     private string _editBuffer = "";
 
+    // Inline confirm state for the destructive actions (update overwrites the slot; delete removes it). The
+    // framework overlay has no modal popup, so the row's action area swaps to a "Overwrite? / Delete?  ✓ ✗"
+    // bar. Mutually exclusive with the rename edit. 0 = none, 1 = update, 2 = delete.
+    private const int ConfirmNone = 0, ConfirmUpdate = 1, ConfirmDelete = 2;
+    private int _confirmIdx = -1;
+    private int _confirmKind = ConfirmNone;
+
     // Hover-to-preview state. Hovering a row arms a debounced 3D preview (re-dressing the model loads each
     // cosmetic's assets, so a short settle avoids thrash when sweeping the mouse). _previewIdx is the outfit
     // currently shown (also highlights that row).
@@ -178,9 +185,38 @@ public sealed partial class Plugin
     private void EnterEdit(int idx)
     {
         if (RowAt(idx) is not { } slot) return;
+        ClearConfirm();                 // rename and confirm are mutually exclusive
         _editingIdx = idx;
         _editBuffer = slot.Name;
         _window?.MarkDirty();
+    }
+
+    private bool IsConfirming(int idx) => _confirmIdx == idx && _confirmKind != ConfirmNone;
+
+    // Arm the inline confirm for a destructive action on this row (cancels any rename in progress).
+    private void ArmConfirm(int idx, int kind)
+    {
+        if (RowAt(idx) is null) return;
+        _editingIdx = -1;
+        _confirmIdx = idx;
+        _confirmKind = kind;
+        _window?.MarkDirty();
+    }
+
+    private void ClearConfirm()
+    {
+        _confirmIdx = -1;
+        _confirmKind = ConfirmNone;
+        _window?.MarkDirty();
+    }
+
+    // Confirm ✓ — run the armed action, then clear the confirm bar.
+    private void ConfirmYes(int idx)
+    {
+        var kind = _confirmKind;
+        ClearConfirm();
+        if (kind == ConfirmUpdate) DoUpdate(idx);
+        else if (kind == ConfirmDelete) DoDelete(idx);
     }
 
     // Persist the edited name (from the live _editBuffer) and return the row to a label. Called by the
@@ -210,8 +246,8 @@ public sealed partial class Plugin
     }
 
     // Re-capture the outfit the player is WEARING now into this slot (keeps its name + position, and
-    // refreshes its dyes to exact per-area). Same guards as Save current outfit.
-    private void OnUpdateRow(int idx)
+    // refreshes its dyes to exact per-area). Same guards as Save current outfit. Runs on confirm ✓.
+    private void DoUpdate(int idx)
     {
         if (RowAt(idx) is not { } slot) return;
         if (!_services.Wardrobe.IsAvailable)
@@ -238,16 +274,25 @@ public sealed partial class Plugin
     private void OnMoveUp(int idx)   { if (_store.Move(CharacterKey, idx, -1)) { Persist(); Repaint(); } }
     private void OnMoveDown(int idx) { if (_store.Move(CharacterKey, idx, +1)) { Persist(); Repaint(); } }
 
-    private void OnDeleteRow(int idx)
+    // Runs on confirm ✓ (which has already cleared the confirm bar).
+    private void DoDelete(int idx)
     {
         if (_store.Delete(CharacterKey, idx)) { Persist(); Repaint(); }
     }
 
     private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;
 
-    // Row-action icon PNGs the overlay font can't provide (loaded once; framework tints them with MenuText).
-    private static readonly byte[]? TrashIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.Icons.trash.png");
-    private static readonly byte[]? RefreshIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.Icons.refresh.png");
+    // Row-action icons — one bold, uniform image set (the overlay font renders most of these poorly at this
+    // size). Loaded once from embedded resources; the framework tints each with the theme text colour.
+    private static byte[]? Icon(string n) => LoadEmbeddedIcon($"Stellar.WardrobeLoadout.Icons.{n}.png");
+    private static readonly byte[]? EditIcon = Icon("edit");
+    private static readonly byte[]? SaveIcon = Icon("save");        // also the confirm ✓
+    private static readonly byte[]? RefreshIcon = Icon("refresh");
+    private static readonly byte[]? UpIcon = Icon("up");
+    private static readonly byte[]? DownIcon = Icon("down");
+    private static readonly byte[]? ApplyIcon = Icon("apply");
+    private static readonly byte[]? TrashIcon = Icon("trash");
+    private static readonly byte[]? CancelIcon = Icon("cancel");    // the confirm ✗
 
     private static byte[]? LoadEmbeddedIcon(string name)
     {
@@ -262,18 +307,13 @@ public sealed partial class Plugin
         catch { return null; }
     }
 
-    // Flat (Bare = no fill/border) glyph-icon button — the label is a single icon glyph from the loc file.
-    // The overlay has no button tooltip, so the icon legend lives in the window help text.
-    private ButtonElement IconButton(string locKey, Action onClick, Func<bool>? enabled = null)
-        => new(() => _loc.T(locKey), onClick, Enabled: enabled, Style: MenuButtonStyle.Bare, Width: 30f);
+    // Compact toolbar-chip icon button (Glass = faint fill + thin accent border), icon-only. Empty label →
+    // the framework centres the PNG and sizes the button to it.
+    private static ButtonElement IconChip(byte[]? png, Action onClick, Func<bool>? enabled = null)
+        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Glass, Width: 30f, Icon: () => png);
 
-    // Flat (Bare) image-icon button — for actions the font has no glyph for (trash, refresh). Empty label
-    // makes it icon-only (centred, sized to match the glyph buttons).
-    private static ButtonElement IconPngButton(byte[]? png, Action onClick, Func<bool>? enabled = null)
-        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Bare, Width: 30f, Icon: () => png);
-
-    // Placeholder for a hidden end-cap reorder arrow (top row has no ▲, last row has no ▼) — keeps the column
-    // aligned without showing an inert button.
+    // Placeholder for a hidden end-cap reorder arrow (top row has no up, last row no down) — keeps the
+    // column aligned without showing an inert button.
     private static TextElement Empty() => new(() => "");
 
     // A row action is available when the row exists and it is NOT the row currently being renamed (so a
@@ -302,34 +342,47 @@ public sealed partial class Plugin
                 () => RowAt(idx) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
                 Muted, NoWrap: true), Width: 40f);
 
-            // Edit ↔ Save (rename) — ✎ / ✓ icons.
+            // Edit ↔ Save (rename): pencil / check icons.
             var editSave = new CellElement(new ConditionalElement(
                 () => IsEditing(idx),
-                Then: IconButton("wardrobe.window.save", () => CommitRename(idx)),
-                Else: IconButton("wardrobe.window.edit", () => EnterEdit(idx), () => RowAt(idx) is not null)), Width: 32f);
+                Then: IconChip(SaveIcon, () => CommitRename(idx)),
+                Else: IconChip(EditIcon, () => EnterEdit(idx), () => RowAt(idx) is not null)), Width: 32f);
 
-            // Update — re-capture the worn outfit into this slot (refresh image icon). Disabled while renaming.
+            // Update (refresh) — re-capture the worn outfit into this slot; ARMS a confirm. Disabled while renaming.
             var update = new CellElement(
-                IconPngButton(RefreshIcon, () => OnUpdateRow(idx), () => NotEditingRow(idx)), Width: 32f);
+                IconChip(RefreshIcon, () => ArmConfirm(idx, ConfirmUpdate), () => NotEditingRow(idx)), Width: 32f);
 
-            // Reorder ▲ ▼ — move this outfit one slot up / down (changes its hotkey number). The arrow is
-            // HIDDEN at the ends (no ▲ on the first row, no ▼ on the last) and disabled while renaming.
+            // Reorder (triangles) — HIDDEN at the ends (no up on the first row, no down on the last), disabled while renaming.
             var up = new CellElement(new ConditionalElement(
                 () => idx > 0,
-                Then: IconButton("wardrobe.window.moveUp", () => OnMoveUp(idx), () => NotEditingRow(idx)),
+                Then: IconChip(UpIcon, () => OnMoveUp(idx), () => NotEditingRow(idx)),
                 Else: Empty()), Width: 32f);
             var down = new CellElement(new ConditionalElement(
                 () => idx < Rows.Count - 1,
-                Then: IconButton("wardrobe.window.moveDown", () => OnMoveDown(idx), () => NotEditingRow(idx)),
+                Then: IconChip(DownIcon, () => OnMoveDown(idx), () => NotEditingRow(idx)),
                 Else: Empty()), Width: 32f);
 
-            // Apply (▶ glyph) / Delete (trash image icon) — disabled while THIS row is being renamed.
-            var apply = new CellElement(
-                IconButton("wardrobe.window.apply", () => OnApplyRow(idx), () => NotEditingRow(idx)), Width: 32f);
-            var del = new CellElement(
-                IconPngButton(TrashIcon, () => OnDeleteRow(idx), () => NotEditingRow(idx)), Width: 32f);
+            // Apply (play) / Delete (trash → ARMS a confirm) — disabled while renaming.
+            var apply = new CellElement(IconChip(ApplyIcon, () => OnApplyRow(idx), () => NotEditingRow(idx)), Width: 32f);
+            var del = new CellElement(IconChip(TrashIcon, () => ArmConfirm(idx, ConfirmDelete), () => NotEditingRow(idx)), Width: 32f);
 
-            var row = new RowElement(new HudElement[] { badge, name, pieces, editSave, update, up, down, apply, del }, Gap: 6f);
+            var iconRow = new RowElement(new HudElement[] { editSave, update, up, down, apply, del }, Gap: 6f);
+
+            // Inline confirm bar (no modal in the overlay): "Overwrite? / Delete?" + confirm ✓ + cancel ✗,
+            // replacing the icon row for the row awaiting confirmation. The outfit name stays visible alongside.
+            var confirmBar = new RowElement(new HudElement[]
+            {
+                new CellElement(new TextElement(
+                    () => _confirmKind == ConfirmUpdate ? _loc.T("wardrobe.window.confirmUpdate") : _loc.T("wardrobe.window.confirmDelete"),
+                    NoWrap: true), Width: 78f),
+                new CellElement(IconChip(SaveIcon,   () => ConfirmYes(idx)),  Width: 32f),
+                new CellElement(IconChip(CancelIcon, () => ClearConfirm()),   Width: 32f),
+            }, Gap: 6f);
+
+            var actions = new CellElement(new ConditionalElement(
+                () => IsConfirming(idx), Then: confirmBar, Else: iconRow), Width: 224f);
+
+            var row = new RowElement(new HudElement[] { badge, name, pieces, actions }, Gap: 6f);
             // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
             // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
             pool[idx] = new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == idx)

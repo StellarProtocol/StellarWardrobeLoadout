@@ -11,15 +11,12 @@
   "wardrobe.toast.applyFailed": "Couldn't apply \"{0}\"",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "Save current outfit",
-  "wardrobe.window.apply": "▶",
-  "wardrobe.window.edit": "✎",
-  "wardrobe.window.save": "✓",
-  "wardrobe.window.moveUp": "▲",
-  "wardrobe.window.moveDown": "▼",
+  "wardrobe.window.confirmUpdate": "Overwrite?",
+  "wardrobe.window.confirmDelete": "Delete?",
   "wardrobe.window.pieces": "{0}pc",
   "wardrobe.window.hotkeyBadge": "H{0}",
   "wardrobe.window.previewLabel": "Preview (hover a row)",
   "wardrobe.window.empty": "No saved outfits yet. Dress up in-game, then click \"Save current outfit\".",
   "wardrobe.window.defaultName": "Outfit {0}",
-  "wardrobe.window.help": "Save the outfit you're wearing, then switch to it by hotkey (first 8 slots) or by clicking ▶. Row icons: ✎ rename · refresh = update to your current outfit · ▲ ▼ reorder · trash = delete. Outfits are saved per character."
+  "wardrobe.window.help": "Save the outfit you're wearing, then switch to it by hotkey (first 8 slots) or with the play button. Row buttons: rename, update to your current outfit, move up, move down, apply, delete. Update and delete ask to confirm. Outfits are saved per character."
 }
