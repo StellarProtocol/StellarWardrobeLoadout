@@ -1,0 +1,22 @@
+{
+  "wardrobe.hotkey.apply": "ใช้ชุด {0}",
+  "wardrobe.hotkey.windowToggle": "เปิดตู้เสื้อผ้า",
+  "wardrobe.toast.apiNotReady": "ตู้เสื้อผ้ายังไม่พร้อม",
+  "wardrobe.toast.noSlot": "ไม่มีชุดที่บันทึกไว้ในช่อง {0}",
+  "wardrobe.toast.inProgress": "กำลังเปลี่ยนชุดอยู่",
+  "wardrobe.toast.captureEmpty": "ไม่มีชุดที่สวมอยู่ให้บันทึก",
+  "wardrobe.toast.saved": "บันทึกชุด \"{0}\" แล้ว",
+  "wardrobe.toast.updated": "อัปเดต \"{0}\" เป็นชุดปัจจุบันแล้ว",
+  "wardrobe.toast.applied": "เปลี่ยนเป็น \"{0}\" แล้ว",
+  "wardrobe.toast.applyFailed": "ใช้ \"{0}\" ไม่ได้",
+  "wardrobe.window.title": "ตู้เสื้อผ้า",
+  "wardrobe.window.saveCurrent": "บันทึกชุดปัจจุบัน",
+  "wardrobe.window.confirmUpdate": "เขียนทับ?",
+  "wardrobe.window.confirmDelete": "ลบ?",
+  "wardrobe.window.pieces": "{0} ชิ้น",
+  "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.previewLabel": "ตัวอย่าง (ชี้ที่แถว)",
+  "wardrobe.window.empty": "ยังไม่มีชุดที่บันทึกไว้ แต่งตัวในเกมแล้วคลิก \"บันทึกชุดปัจจุบัน\"",
+  "wardrobe.window.defaultName": "ชุด {0}",
+  "wardrobe.window.help": "บันทึกชุดที่คุณสวมอยู่ แล้วสลับด้วยปุ่มลัด (8 ช่องแรก) หรือปุ่มเล่น ปุ่มในแถว: เปลี่ยนชื่อ, อัปเดตเป็นชุดปัจจุบัน, เลื่อนขึ้น, เลื่อนลง, ใช้งาน, ลบ การอัปเดตและลบจะถามยืนยัน ชุดถูกบันทึกแยกตามตัวละคร"
+}
