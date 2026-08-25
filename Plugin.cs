@@ -172,7 +172,7 @@ public sealed partial class Plugin : IStellarPlugin
         {
             Name = name,
             Regions = new Dictionary<int, int>(worn),
-            Dyes = CaptureDyes(),
+            DyeAreas = CaptureDyeAreas(),
             SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         });
         Persist();
@@ -181,29 +181,30 @@ public sealed partial class Plugin : IStellarPlugin
         return true;
     }
 
-    // Capture the worn dye colours per region from IEntityDetail.GetFashion (the attr-201 broadcast the
-    // Entity Inspector reads) — region → flattened RGB triples (each channel 0..1). Best-effort: any failure
-    // just yields no dyes (the piece previews in its default colour).
-    private Dictionary<int, float[]> CaptureDyes()
+    // Capture the worn dye colours per region AND per area from IEntityDetail.GetFashion (the attr-201
+    // broadcast the Entity Inspector reads) — region → (EFashionColorAreaType area 1..16 → RGB triple,
+    // each channel 0..1). Carries each colour's real area so multi-area pieces preview correctly; when the
+    // source did not supply area keys, falls back to positional areas 1,2,3,… (the pre-fix behaviour).
+    // Best-effort: any failure just yields no dyes (the piece previews in its default colour).
+    private Dictionary<int, Dictionary<int, float[]>> CaptureDyeAreas()
     {
-        var dyes = new Dictionary<int, float[]>();
+        var result = new Dictionary<int, Dictionary<int, float[]>>();
         try
         {
             foreach (var fe in _services.EntityDetail.GetFashion(_services.CombatSnapshot.LocalEntityId))
             {
                 if (fe.Dyes.Length == 0) continue;
-                var flat = new float[fe.Dyes.Length * 3];
+                var map = new Dictionary<int, float[]>(fe.Dyes.Length);
                 for (var i = 0; i < fe.Dyes.Length; i++)
                 {
-                    flat[i * 3] = fe.Dyes[i].R;
-                    flat[i * 3 + 1] = fe.Dyes[i].G;
-                    flat[i * 3 + 2] = fe.Dyes[i].B;
+                    var area = i < fe.DyeAreas.Length ? fe.DyeAreas[i] : i + 1;   // positional if no area keys
+                    map[area] = new[] { fe.Dyes[i].R, fe.Dyes[i].G, fe.Dyes[i].B };
                 }
-                dyes[fe.Slot] = flat;
+                result[fe.Slot] = map;
             }
         }
         catch { /* dyes are best-effort */ }
-        return dyes;
+        return result;
     }
 
     private static bool AllEmpty(IReadOnlyDictionary<int, int> outfit)

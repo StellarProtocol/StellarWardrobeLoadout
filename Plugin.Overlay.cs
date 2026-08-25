@@ -38,8 +38,10 @@ public sealed partial class Plugin
     // Hover-to-preview state. Hovering a row arms a debounced 3D preview (re-dressing the model loads each
     // cosmetic's assets, so a short settle avoids thrash when sweeping the mouse). _previewIdx is the outfit
     // currently shown (also highlights that row).
-    private const int PreviewW = 240;
-    private const int PreviewH = 460;
+    // Pane sized/styled to read like the Entity Inspector's portrait (transparent backdrop, comparable
+    // proportions); the body-framing algorithm is shared (PortraitModelHost). Height aligns with the list.
+    private const int PreviewW = 260;
+    private const int PreviewH = 440;
     private const long HoverDebounceTicks = 8;   // ~130 ms before the hovered outfit loads
     private long _tick;
     private int _hoverPendingIdx = -1;
@@ -52,9 +54,9 @@ public sealed partial class Plugin
             new WindowSpec(
                 Id:          "wardrobeloadout.window",
                 Title:       _loc.T("wardrobe.window.title"),
-                // 540 list column (454 row budget + scroll inset) + 8 gap + 248 preview pane + GlassMenu
+                // 540 list column (454 row budget + scroll inset) + 8 gap + (260+8) preview pane + GlassMenu
                 // body padding (24) + margin.
-                DefaultRect: new WindowRect(20f, 120f, 840f, 0f),
+                DefaultRect: new WindowRect(20f, 120f, 860f, 0f),
                 Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.GlassMenu)
             {
@@ -118,12 +120,41 @@ public sealed partial class Plugin
     {
         if (idx == _previewIdx) return;   // already showing this outfit
         if (RowAt(idx) is not { } slot) return;
-        // Prefer the dyes captured with the outfit; for outfits saved before dye-capture existed, fall back
-        // to the live worn dyes so they still show colour (correct when the previewed outfit is the worn one).
-        var dyes = slot.Dyes.Count > 0 ? (IReadOnlyDictionary<int, float[]>)slot.Dyes : CaptureDyes();
-        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions, dyes);
+        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions, BuildPreviewDyes(slot));
+        DiagPreview(slot);
         _previewIdx = idx;
         _window?.MarkDirty();
+    }
+
+    // Choose the dye source for a preview: exact per-area (new saves) → legacy flat treated as positional
+    // areas (older saves) → live worn dyes (outfits saved before any dye capture). Returns region → area → RGB.
+    private IReadOnlyDictionary<int, IReadOnlyDictionary<int, float[]>> BuildPreviewDyes(OutfitSlot slot)
+    {
+        if (slot.DyeAreas.Count > 0) return ToAreaMap(slot.DyeAreas);
+        if (slot.Dyes.Count > 0) return FlatToAreaMap(slot.Dyes);
+        return ToAreaMap(CaptureDyeAreas());
+    }
+
+    private static IReadOnlyDictionary<int, IReadOnlyDictionary<int, float[]>> ToAreaMap(Dictionary<int, Dictionary<int, float[]>> src)
+    {
+        var map = new Dictionary<int, IReadOnlyDictionary<int, float[]>>(src.Count);
+        foreach (var kv in src) map[kv.Key] = kv.Value;
+        return map;
+    }
+
+    // Legacy flat triples → positional areas 1,2,3,… (approximate — the pre-fix behaviour, kept so outfits
+    // saved before per-area capture still show colour until re-saved).
+    private static IReadOnlyDictionary<int, IReadOnlyDictionary<int, float[]>> FlatToAreaMap(Dictionary<int, float[]> flat)
+    {
+        var map = new Dictionary<int, IReadOnlyDictionary<int, float[]>>(flat.Count);
+        foreach (var kv in flat)
+        {
+            var f = kv.Value;
+            var areas = new Dictionary<int, float[]>();
+            for (int i = 0, a = 1; i + 2 < f.Length; i += 3, a++) areas[a] = new[] { f[i], f[i + 1], f[i + 2] };
+            map[kv.Key] = areas;
+        }
+        return map;
     }
 
     private void HidePreview()
@@ -260,14 +291,19 @@ public sealed partial class Plugin
             Then: new ScrollElement(new ListElement(() => Rows.Count, pool, Columns: 1), Height: 460f),
             Else: new TextElement(() => _loc.T("wardrobe.window.empty"), Muted));
 
-        // 3D preview pane (right): shows the hovered outfit on a live self model; drag to rotate.
+        // 3D preview pane (right): shows the hovered outfit on a live self model. Drag rotates, scroll
+        // zooms, Shift+drag pans — same interaction model as the Entity Inspector's portrait. Transparent
+        // backdrop so only the character draws (no dark box), matching the inspector.
         var previewPane = new ColumnElement(new HudElement[]
         {
             new TextElement(() => _loc.T("wardrobe.window.previewLabel"), Muted),
             new RenderTextureHostElement(
                 () => _services.WardrobePreview.Texture, PreviewW, PreviewH,
                 OnDrag: (dx, dy) => _services.WardrobePreview.Orbit(dx, dy),
-                OnViewportResize: (w, h) => _services.WardrobePreview.SetViewport(w, h)),
+                OnScroll: d => _services.WardrobePreview.Zoom(d),
+                OnPan: (dx, dy) => _services.WardrobePreview.Pan(dx, dy),
+                OnViewportResize: (w, h) => _services.WardrobePreview.SetViewport(w, h),
+                TransparentBackground: true),
         }, Gap: 4f);
 
         var listAndPreview = new RowElement(new HudElement[]
