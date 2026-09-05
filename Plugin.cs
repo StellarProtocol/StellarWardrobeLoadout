@@ -25,15 +25,24 @@ namespace Stellar.WardrobeLoadout;
 /// re-applies that skin AFTER the outfit switch succeeds (both share the game's one-apply-in-flight
 /// slot); an outfit saved before 1.1.0 carries none and leaves the weapon skin alone.</para>
 ///
-/// <para>Outfits are stored per character (keyed by character name) in the plugin config
-/// (<c>System.Text.Json</c> via <see cref="WardrobeStore"/>). Apply success/failure is toasted by the
-/// GAME itself; this plugin toasts only its own guard messages (API-not-ready, empty slot,
-/// switch-in-flight, nothing-to-save, weapon-skin-failed) and logs outcomes.</para>
+/// <para>Outfits are stored per character (keyed by character name) in the plugin's OWN data store —
+/// <c>stellar/plugindata/stellar.wardrobeloadout.data/outfits.json</c> via
+/// <see cref="IPluginDataStore"/> and <see cref="OutfitPersistence"/> — NOT in the shared config file
+/// (owner ruling 2026-09-05: user data belongs in plugindata, settings stay in config). Outfits saved
+/// by an earlier build are migrated out of the legacy <c>wardrobe.outfits</c> config key on first
+/// construct; that key is then LEFT IN PLACE, frozen and never rewritten, so rolling back to a
+/// pre-migration build still finds them (process rules § 6). Plugindata always wins on a later return
+/// to this build. Apply success/failure is toasted by the GAME itself; this plugin toasts only its own
+/// guard messages (API-not-ready, empty slot, switch-in-flight, nothing-to-save, weapon-skin-failed)
+/// and logs outcomes.</para>
 /// </summary>
 public sealed partial class Plugin : IStellarPlugin
 {
     private const int HotkeySlotCount = 8;
-    private const string OutfitsKey = "outfits";
+
+    // LEGACY config key (section "wardrobe"). Read once at construct as a migration source; never
+    // written again — see OutfitPersistence for the rollback contract.
+    private const string LegacyOutfitsKey = "outfits";
 
     public string Name => "WardrobeLoadout";
 
@@ -52,7 +61,7 @@ public sealed partial class Plugin : IStellarPlugin
         _services = services;
         _loc = services.Localization;
         _cfg = services.Config.GetSection("wardrobe");
-        _store = new WardrobeStore(_cfg.Get<Dictionary<string, List<OutfitSlot>>>(OutfitsKey, new()));
+        _store = new WardrobeStore(LoadOutfits());
         _services.Log.Info("[WardrobeLoadout] plugin constructed");
 
         _actions = new IHotkeyAction[HotkeySlotCount];
@@ -255,11 +264,44 @@ public sealed partial class Plugin : IStellarPlugin
         return true;
     }
 
-    private void Persist()
+    // The saved outfits, from the plugin's own data store — falling back ONCE to the legacy config key
+    // when this is the first run after the move (owner ruling 2026-09-05). The config copy is only ever
+    // READ here; Persist() writes plugindata alone, so the frozen key keeps whatever a rolled-back build
+    // would need. Bytes we cannot parse are parked, never dropped.
+    private Dictionary<string, List<OutfitSlot>> LoadOutfits()
     {
-        _cfg.Set(OutfitsKey, _store.Root);
-        _cfg.Save();
+        var stored = _services.Data.Read(OutfitPersistence.FileName);
+        var fromData = OutfitPersistence.Deserialize(stored, out var corrupt);
+        if (corrupt && stored is not null)
+        {
+            _services.Data.Write(OutfitPersistence.CorruptFileName, stored);
+            _services.Log.Warning(
+                $"[WardrobeLoadout] {OutfitPersistence.FileName} could not be parsed — parked as {OutfitPersistence.CorruptFileName}; falling back to the config copy");
+        }
+
+        var legacy = _cfg.Get<Dictionary<string, List<OutfitSlot>>>(LegacyOutfitsKey, null);
+        switch (OutfitPersistence.Decide(stored is not null && !corrupt, OutfitPersistence.HasOutfits(legacy)))
+        {
+            case MigrationDecision.UsePluginData:
+                return fromData;
+
+            case MigrationDecision.MigrateFromConfig:
+            {
+                var migrated = OutfitPersistence.Normalize(legacy);
+                _services.Data.Write(OutfitPersistence.FileName, OutfitPersistence.Serialize(migrated));
+                _services.Log.Info(
+                    $"[WardrobeLoadout] migrated {OutfitPersistence.CountOutfits(migrated)} outfits for {migrated.Count} characters from config to plugindata "
+                    + $"(config key 'wardrobe.{LegacyOutfitsKey}' left in place, frozen, so a rollback still finds them)");
+                return migrated;
+            }
+
+            default:
+                return new Dictionary<string, List<OutfitSlot>>();
+        }
     }
+
+    private void Persist()
+        => _services.Data.Write(OutfitPersistence.FileName, OutfitPersistence.Serialize(_store.Root));
 
     private void Toast(NoticeTipType type, string content)
         => _services.NoticeTips.Create(type).WithContent(content).Show();

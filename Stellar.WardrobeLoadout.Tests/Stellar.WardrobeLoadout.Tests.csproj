@@ -15,5 +15,6 @@
     <Compile Include="../OutfitSlot.cs" />
     <Compile Include="../WardrobeStore.cs" />
     <Compile Include="../WardrobeRules.cs" />
+    <Compile Include="../OutfitPersistence.cs" />
   </ItemGroup>
 </Project>
