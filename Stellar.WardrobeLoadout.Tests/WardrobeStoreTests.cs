@@ -95,12 +95,19 @@ public sealed class WardrobeStoreTests
         store.Add("Aria", Slot("other", (702, 10)));
         store.Get("Aria")[0].Dyes[701] = new[] { 0.1f, 0.2f, 0.3f };   // legacy flat present
 
-        var regions = new Dictionary<int, int> { [701] = 99, [703] = 77 };
-        var dyeAreas = new Dictionary<int, Dictionary<int, float[]>>
+        var captured = new OutfitSlot
         {
-            [701] = new() { [3] = new[] { 0.5f, 0.25f, 0.75f } },
+            Name = "ignored — the captured name never overwrites the stored one",
+            Regions = new Dictionary<int, int> { [701] = 99, [703] = 77 },
+            DyeAreas = new Dictionary<int, Dictionary<int, float[]>>
+            {
+                [701] = new() { [3] = new[] { 0.5f, 0.25f, 0.75f } },
+            },
+            WeaponProfessionId = 9,
+            WeaponSkinId = 4021,
+            SavedAtMs = 2000,
         };
-        Assert.True(store.Update("Aria", 0, regions, dyeAreas, 2000));
+        Assert.True(store.Update("Aria", 0, captured));
 
         var slot = store.Get("Aria")[0];
         Assert.Equal("keep-me", slot.Name);                 // name preserved
@@ -109,8 +116,80 @@ public sealed class WardrobeStoreTests
         Assert.Equal(2000, slot.SavedAtMs);
         Assert.Equal(0.25f, slot.DyeAreas[701][3][1], 5);   // per-area dyes stored
         Assert.Empty(slot.Dyes);                            // legacy flat cleared
+        // The re-capture carries the weapon skin too (Discord "Wardrobe Plugin enhancements" thread,
+        // 2026-09-03/04): updating a slot must refresh its skin, not leave the outfit's old one behind.
+        Assert.Equal(9, slot.WeaponProfessionId);
+        Assert.Equal(4021, slot.WeaponSkinId);
+        Assert.True(slot.HasWeaponSkin());
         Assert.Equal("other", store.Get("Aria")[1].Name);   // position preserved
-        Assert.False(store.Update("Aria", 9, regions, dyeAreas, 1));   // out of range
+        Assert.False(store.Update("Aria", 9, captured));    // out of range
+    }
+
+    // Origin: Discord "Wardrobe Plugin enhancements" thread, 2026-09-03/04 — outfits saved by 1.0.0 carry
+    // no weapon fields at all. Reading one must mean "this outfit carries no weapon skin" (applying it
+    // leaves the player's skin alone), NOT "reset the weapon skin to the class default" (which 0/0 with a
+    // non-zero profession would mean). Rollback-safety pin: a newer config must never lose an older one's
+    // outfit data either, so the regions are asserted intact.
+    [Fact]
+    public void Legacy_json_without_weapon_fields_reads_as_no_weapon_skin()
+    {
+        const string legacy = """
+        {
+          "Aria": [
+            {
+              "Name": "Midnight",
+              "Regions": { "701": 55, "711": 12 },
+              "Dyes": {},
+              "DyeAreas": {},
+              "SavedAtMs": 1700000000000
+            }
+          ]
+        }
+        """;
+
+        var root = JsonSerializer.Deserialize<Dictionary<string, List<OutfitSlot>>>(legacy);
+        var slot = new WardrobeStore(root).Get("Aria")[0];
+
+        Assert.Equal("Midnight", slot.Name);
+        Assert.Equal(55, slot.Regions[701]);              // 1.0.0 outfit data intact
+        Assert.Equal(12, slot.Regions[711]);
+        Assert.Equal(1700000000000, slot.SavedAtMs);
+        Assert.Equal(0, slot.WeaponProfessionId);         // absent field → "no weapon skin stored"
+        Assert.Equal(0, slot.WeaponSkinId);
+        Assert.False(slot.HasWeaponSkin());               // → apply leaves the worn skin alone
+    }
+
+    // Origin: Discord "Wardrobe Plugin enhancements" thread, 2026-09-03/04 — the saved weapon skin has to
+    // survive the config round-trip, including skinId 0 (a real value: that class's DEFAULT weapon look,
+    // which the game restores) as distinct from professionId 0 (= no skin stored at all).
+    [Fact]
+    public void Weapon_skin_round_trips_through_json()
+    {
+        var store = new WardrobeStore();
+        var withSkin = Slot("Midnight", (701, 55));
+        withSkin.WeaponProfessionId = 9;
+        withSkin.WeaponSkinId = 4021;
+        var defaultLook = Slot("Plain", (701, 60));
+        defaultLook.WeaponProfessionId = 5;
+        defaultLook.WeaponSkinId = 0;                     // class default look, still a stored skin
+        store.Add("Aria", withSkin);
+        store.Add("Aria", defaultLook);
+        store.Add("Aria", Slot("NoSkin", (701, 61)));     // nothing captured → 0/0
+
+        var json = JsonSerializer.Serialize(store.Root);
+        var reloaded = new WardrobeStore(JsonSerializer.Deserialize<Dictionary<string, List<OutfitSlot>>>(json));
+
+        var a = reloaded.Get("Aria")[0];
+        Assert.Equal(9, a.WeaponProfessionId);
+        Assert.Equal(4021, a.WeaponSkinId);
+        Assert.True(a.HasWeaponSkin());
+
+        var b = reloaded.Get("Aria")[1];
+        Assert.Equal(5, b.WeaponProfessionId);
+        Assert.Equal(0, b.WeaponSkinId);
+        Assert.True(b.HasWeaponSkin());                   // skinId 0 is a value, not an absence
+
+        Assert.False(reloaded.Get("Aria")[2].HasWeaponSkin());
     }
 
     [Fact]

@@ -6,18 +6,29 @@ using Stellar.Abstractions.Services;
 namespace Stellar.WardrobeLoadout;
 
 /// <summary>
-/// The wardrobe overlay: a "Save current outfit" button plus a scrollable list of the current
+/// The wardrobe overlay: a "Save current outfit" button plus a scroll-windowed list of the current
 /// character's saved outfits — each row shows its hotkey badge (H1..H8 for the first 8), an editable
-/// name, its piece count, and Apply / Top (move-to-first) / Delete controls. Storage + apply logic
+/// name, its piece count, and rename / update / reorder / apply / delete controls. Storage + apply logic
 /// live in <see cref="Plugin"/> (<c>Plugin.cs</c> / <see cref="WardrobeStore"/>); this partial is
 /// presentation only. The list is read LIVE from the store (see <c>Rows</c>) so it always reflects the
 /// current character's outfits, even before the character name resolves at boot.
+///
+/// <para>The list is a <see cref="VirtualListElement"/>: a small pool of row widgets is recycled over the
+/// logical outfit list as the user scrolls, so the number of outfits it can show is UNBOUNDED. Each pooled
+/// row therefore renders a DIFFERENT outfit from refresh to refresh — every row closure resolves its
+/// logical index through <c>Idx()</c> (= <c>_windowFirst</c> + pool slot), never a captured constant.</para>
 /// </summary>
 public sealed partial class Plugin
 {
-    // Over-provisioned above any realistic saved-outfit count; rows are built ONCE and read live via
-    // RowAt(idx). The list is unlimited in storage, but the visible pool caps at this many.
-    private const int RowPoolSize = 48;
+    // Pool size = rows that fit the 460px viewport (≈14 at scale 1.0) plus margin for partial rows at both
+    // edges. NOT a cap on the outfit count: the VirtualListElement recycles these over the whole list.
+    // (1.0.0 used a fixed 48-row EAGER pool, which silently hid outfit 49 onward — Discord "can't scroll
+    // past the 48th outfit". A pool constant must never bound what the user can reach again.)
+    private const int PoolRows = 20;
+
+    // First logical outfit index the pool currently renders — written by the VirtualListElement's OnWindow
+    // BEFORE any row Func is pulled, so a row's Idx() is correct for the frame being drawn.
+    private int _windowFirst;
 
     private IWindowControl _window = null!;
     private IDisposable? _launcherEntry;
@@ -30,8 +41,12 @@ public sealed partial class Plugin
 
     // Inline rename edit state. The name is a LABEL by default; clicking Edit turns THAT row into an
     // input field (Save/Enter commits it and returns to a label). _editBuffer is kept live by the
-    // input's OnChange so the Save button can read the typed value without an Enter first (the framework
-    // InputElement fires Submit only on Enter/blur — see Stellar.Infrastructure LayoutPanel).
+    // input's OnChange so the ✓ chip can read the typed value without an Enter first: the framework's
+    // InputElement submits on ENTER ONLY — losing focus does NOT submit (UGuiTextInput registers no
+    // onEndEdit listener; see Stellar.Infrastructure/Game/UGuiTextInput.cs).
+    // With the recycled virtual list this matters: scrolling the row being renamed out of view destroys
+    // its keyboard focus, but the typed text lives in _editBuffer (not in the field), so scrolling back
+    // re-shows it intact — the user finishes by clicking the field again or pressing the ✓ chip.
     private int _editingIdx = -1;
     private string _editBuffer = "";
 
@@ -246,7 +261,7 @@ public sealed partial class Plugin
     }
 
     // Re-capture the outfit the player is WEARING now into this slot (keeps its name + position, and
-    // refreshes its dyes to exact per-area). Same guards as Save current outfit. Runs on confirm ✓.
+    // refreshes its dyes and weapon skin). Same guards as Save current outfit. Runs on confirm ✓.
     private void DoUpdate(int idx)
     {
         if (RowAt(idx) is not { } slot) return;
@@ -255,17 +270,15 @@ public sealed partial class Plugin
             Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.apiNotReady"));
             return;
         }
-        var worn = _services.Wardrobe.GetWornOutfit();
-        if (worn is null || AllEmpty(worn))
+        if (CaptureCurrent() is not { } captured)
         {
             Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.captureEmpty"));
             return;
         }
-        if (_store.Update(CharacterKey, idx, new Dictionary<int, int>(worn), CaptureDyeAreas(),
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))
+        if (_store.Update(CharacterKey, idx, captured))
         {
             Persist();
-            DiagUpdated(slot.Name, worn);
+            DiagUpdated(slot);   // slot IS the updated entry (Update overwrites in place)
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.updated", slot.Name));
             Repaint();
         }
@@ -320,81 +333,109 @@ public sealed partial class Plugin
     // column aligned without showing an inert button.
     private static TextElement Empty() => new(() => "");
 
-    // A row action is available when the row exists and it is NOT the row currently being renamed (so a
-    // reorder / update / delete / apply can't race an in-progress rename edit).
-    private bool NotEditingRow(int idx) => RowAt(idx) is not null && !IsEditing(idx);
+    // A row action is available when the row exists, it is NOT the row currently being renamed (so a
+    // reorder / update / delete / apply can't race an in-progress rename edit), and NO confirm is armed on
+    // ANY row. That last term matters because the confirm is armed against a LOGICAL INDEX: arm Delete on
+    // row 5, then press ▼ on row 4, and rows 4 and 5 swap — the pending ✓ would delete the outfit that
+    // moved into slot 5, i.e. the wrong one. Freezing every row's actions while a confirm is pending keeps
+    // "the row you armed" and "the row that gets hit" the same row. (Edit is NOT gated on this: EnterEdit
+    // clears the armed confirm before it starts a rename.)
+    private bool RowActionable(int idx)
+        => RowAt(idx) is not null && !IsEditing(idx) && _confirmKind == ConfirmNone;
 
+    // Uniform pooled-row height the VirtualListElement positions rows on. The tallest thing in a row is an
+    // icon chip, whose height is the framework's button floor Scaled(11)+12 (= 23 at FontScale 1.0, the
+    // scale is Round()ed exactly as WindowBuilder.Scaled does); the SelectableElement wrapper adds its
+    // 4+4 vertical padding, and 2 px reproduces the inter-row gap the eager ListElement had → 33 px at
+    // scale 1.0 (sandbox-measured, see Stories.WardrobeLoadout). FontScale 0.8..1.4 → 31..37 px.
+    // The arithmetic lives in WardrobeRules so it is unit-pinned (WardrobeRulesTests).
+    private float RowHeight => WardrobeRules.RowHeightFor(_services.Theme.Text.FontScale);
+
+    // The recycled row widgets. Each is built ONCE against its pool slot; the logical outfit it shows is
+    // resolved per refresh through Idx().
     private HudElement[] BuildRowPool()
     {
-        var pool = new HudElement[RowPoolSize];
-        for (var i = 0; i < RowPoolSize; i++)
+        var pool = new HudElement[PoolRows];
+        for (var i = 0; i < PoolRows; i++)
         {
-            var idx = i;   // capture per row
-
-            var badge = new CellElement(new TextElement(
-                () => idx < HotkeySlotCount && RowAt(idx) is not null ? _loc.TFormat("wardrobe.window.hotkeyBadge", idx + 1) : "",
-                Muted, NoWrap: true), Width: 28f);
-
-            // Name: a LABEL by default; the row being edited swaps to an input field (same width). Wider
-            // than before — the icon buttons freed the space, so long outfit names read fully.
-            var name = new CellElement(new ConditionalElement(
-                () => IsEditing(idx),
-                Then: new InputElement(() => _editBuffer, _ => CommitRename(idx), Width: 178f, OnChange: s => _editBuffer = s),
-                Else: new TextElement(() => RowAt(idx)?.Name ?? "", NoWrap: true)), Width: 180f);
-
-            var pieces = new CellElement(new TextElement(
-                () => RowAt(idx) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
-                Muted, NoWrap: true), Width: 40f);
-
-            // Edit ↔ Save (rename): pencil / check icons.
-            var editSave = new CellElement(new ConditionalElement(
-                () => IsEditing(idx),
-                Then: IconChip(SaveIcon, () => CommitRename(idx)),
-                Else: IconChip(EditIcon, () => EnterEdit(idx), () => RowAt(idx) is not null)), Width: 32f);
-
-            // Update (refresh) — re-capture the worn outfit into this slot; ARMS a confirm. Disabled while renaming.
-            var update = new CellElement(
-                IconChip(RefreshIcon, () => ArmConfirm(idx, ConfirmUpdate), () => NotEditingRow(idx)), Width: 32f);
-
-            // Reorder (triangles) — HIDDEN at the ends (no up on the first row, no down on the last), disabled while renaming.
-            var up = new CellElement(new ConditionalElement(
-                () => idx > 0,
-                Then: IconChip(UpIcon, () => OnMoveUp(idx), () => NotEditingRow(idx)),
-                Else: Empty()), Width: 32f);
-            var down = new CellElement(new ConditionalElement(
-                () => idx < Rows.Count - 1,
-                Then: IconChip(DownIcon, () => OnMoveDown(idx), () => NotEditingRow(idx)),
-                Else: Empty()), Width: 32f);
-
-            // Apply (play) / Delete (trash → ARMS a confirm) — disabled while renaming.
-            var apply = new CellElement(IconChip(ApplyIcon, () => OnApplyRow(idx), () => NotEditingRow(idx)), Width: 32f);
-            var del = new CellElement(IconChip(TrashIcon, () => ArmConfirm(idx, ConfirmDelete), () => NotEditingRow(idx)), Width: 32f);
-
-            var iconRow = new RowElement(new HudElement[] { editSave, update, up, down, apply, del }, Gap: 6f);
-
-            // Inline confirm bar (no modal in the overlay): "Overwrite? / Delete?" + confirm ✓ + cancel ✗,
-            // replacing the icon row for the row awaiting confirmation. The outfit name stays visible alongside.
-            var confirmBar = new RowElement(new HudElement[]
-            {
-                new CellElement(new TextElement(
-                    () => _confirmKind == ConfirmUpdate ? _loc.T("wardrobe.window.confirmUpdate") : _loc.T("wardrobe.window.confirmDelete"),
-                    NoWrap: true), Width: 78f),
-                new CellElement(IconChip(SaveIcon,   () => ConfirmYes(idx)),  Width: 32f),
-                new CellElement(IconChip(CancelIcon, () => ClearConfirm()),   Width: 32f),
-            }, Gap: 6f);
-
-            var actions = new CellElement(new ConditionalElement(
-                () => IsConfirming(idx), Then: confirmBar, Else: iconRow), Width: 224f);
-
-            var row = new RowElement(new HudElement[] { badge, name, pieces, actions }, Gap: 6f);
-            // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
-            // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
-            pool[idx] = new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == idx)
-            {
-                OnHover = on => OnRowHover(idx, on),
-            };
+            var slot = i;   // the POOL slot — fixed for the lifetime of the widget
+            pool[slot] = BuildRow(() => _windowFirst + slot);
         }
         return pool;
+    }
+
+    // One pooled row. Idx() = the LOGICAL outfit index this widget renders on the current refresh
+    // (_windowFirst + its pool slot) — EVERY closure below must go through it, never a captured constant,
+    // or the row would act on whichever outfit it happened to show when the window was built.
+    private HudElement BuildRow(Func<int> Idx)
+    {
+        var badge = new CellElement(new TextElement(
+            () => Idx() < HotkeySlotCount && RowAt(Idx()) is not null ? _loc.TFormat("wardrobe.window.hotkeyBadge", Idx() + 1) : "",
+            Muted, NoWrap: true), Width: 28f);
+
+        // Name: a LABEL by default; the row being edited swaps to an input field (same width). Wider
+        // than before — the icon buttons freed the space, so long outfit names read fully.
+        var name = new CellElement(new ConditionalElement(
+            () => IsEditing(Idx()),
+            Then: new InputElement(() => _editBuffer, _ => CommitRename(Idx()), Width: 178f, OnChange: s => _editBuffer = s),
+            Else: new TextElement(() => RowAt(Idx())?.Name ?? "", NoWrap: true)), Width: 180f);
+
+        var pieces = new CellElement(new TextElement(
+            () => RowAt(Idx()) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
+            Muted, NoWrap: true), Width: 40f);
+
+        var row = new RowElement(new HudElement[] { badge, name, pieces, BuildActions(Idx) }, Gap: 6f);
+        // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
+        // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
+        return new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == Idx())
+        {
+            OnHover = on => OnRowHover(Idx(), on),
+        };
+    }
+
+    // The row's right-hand action area: six icon chips (rename, update, up, down, apply, delete), swapped
+    // for the inline confirm bar while this row awaits a yes/no on a destructive action.
+    private HudElement BuildActions(Func<int> Idx)
+    {
+        // Edit ↔ Save (rename): pencil / check icons.
+        var editSave = new CellElement(new ConditionalElement(
+            () => IsEditing(Idx()),
+            Then: IconChip(SaveIcon, () => CommitRename(Idx())),
+            Else: IconChip(EditIcon, () => EnterEdit(Idx()), () => RowAt(Idx()) is not null)), Width: 32f);
+
+        // Update (refresh) — re-capture the worn outfit into this slot; ARMS a confirm. Disabled while renaming.
+        var update = new CellElement(
+            IconChip(RefreshIcon, () => ArmConfirm(Idx(), ConfirmUpdate), () => RowActionable(Idx())), Width: 32f);
+
+        // Reorder (triangles) — HIDDEN at the ends (no up on the first row, no down on the last), disabled while renaming.
+        var up = new CellElement(new ConditionalElement(
+            () => Idx() > 0,
+            Then: IconChip(UpIcon, () => OnMoveUp(Idx()), () => RowActionable(Idx())),
+            Else: Empty()), Width: 32f);
+        var down = new CellElement(new ConditionalElement(
+            () => Idx() < Rows.Count - 1,
+            Then: IconChip(DownIcon, () => OnMoveDown(Idx()), () => RowActionable(Idx())),
+            Else: Empty()), Width: 32f);
+
+        // Apply (play) / Delete (trash → ARMS a confirm) — disabled while renaming.
+        var apply = new CellElement(IconChip(ApplyIcon, () => OnApplyRow(Idx()), () => RowActionable(Idx())), Width: 32f);
+        var del = new CellElement(IconChip(TrashIcon, () => ArmConfirm(Idx(), ConfirmDelete), () => RowActionable(Idx())), Width: 32f);
+
+        var iconRow = new RowElement(new HudElement[] { editSave, update, up, down, apply, del }, Gap: 6f);
+
+        // Inline confirm bar (no modal in the overlay): "Overwrite? / Delete?" + confirm ✓ + cancel ✗,
+        // replacing the icon row for the row awaiting confirmation. The outfit name stays visible alongside.
+        var confirmBar = new RowElement(new HudElement[]
+        {
+            new CellElement(new TextElement(
+                () => _confirmKind == ConfirmUpdate ? _loc.T("wardrobe.window.confirmUpdate") : _loc.T("wardrobe.window.confirmDelete"),
+                NoWrap: true), Width: 78f),
+            new CellElement(IconChip(SaveIcon,   () => ConfirmYes(Idx())), Width: 32f),
+            new CellElement(IconChip(CancelIcon, () => ClearConfirm()),    Width: 32f),
+        }, Gap: 6f);
+
+        return new CellElement(new ConditionalElement(
+            () => IsConfirming(Idx()), Then: confirmBar, Else: iconRow), Width: 224f);
     }
 
     private HudElement BuildRoot()
@@ -406,9 +447,13 @@ public sealed partial class Plugin
         var saveButton = new ButtonElement(
             () => _loc.T("wardrobe.window.saveCurrent"), OnSaveCurrent, Width: 200f);
 
+        // Scroll-windowed: the pool recycles over Rows.Count logical outfits, so the list reaches ALL of
+        // them (the eager ListElement showed at most pool-size rows). The virtual list brings its own
+        // scroll viewport — no ScrollElement wrapper. RowHeight is read once at build (the record takes a
+        // float); a FontScale change re-skins text but keeps this pitch until the window is rebuilt.
         var list = new ConditionalElement(
             () => Rows.Count > 0,
-            Then: new ScrollElement(new ListElement(() => Rows.Count, pool, Columns: 1), Height: 460f),
+            Then: new VirtualListElement(() => Rows.Count, RowHeight, pool, first => _windowFirst = first, Height: 460f),
             Else: new TextElement(() => _loc.T("wardrobe.window.empty"), Muted));
 
         // 3D preview pane (right): shows the hovered outfit on a live self model. Drag rotates, scroll

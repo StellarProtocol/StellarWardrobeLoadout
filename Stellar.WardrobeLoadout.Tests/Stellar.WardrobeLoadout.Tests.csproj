@@ -10,9 +10,10 @@
     <PackageReference Include="xunit" Version="2.6.6" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
   </ItemGroup>
-  <!-- Compile the pure-BCL store + record directly; no framework/Unity refs needed. -->
+  <!-- Compile the pure-BCL store + record + decision rules directly; no framework/Unity refs needed. -->
   <ItemGroup>
     <Compile Include="../OutfitSlot.cs" />
     <Compile Include="../WardrobeStore.cs" />
+    <Compile Include="../WardrobeRules.cs" />
   </ItemGroup>
 </Project>

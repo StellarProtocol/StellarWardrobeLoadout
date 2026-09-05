@@ -15,7 +15,7 @@ public sealed partial class Plugin
     private void DiagApplying(OutfitSlot slot)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] apply '{slot.Name}' ({Worn(slot.Regions)} worn)");
+        _services.Log.Info($"[WardrobeLoadout] apply '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)})");
     }
 
     private void DiagSkipped(int slotNumber, string reason)
@@ -24,17 +24,22 @@ public sealed partial class Plugin
         _services.Log.Info($"[WardrobeLoadout] apply slot {slotNumber} skipped: {reason}");
     }
 
-    private void DiagSaved(string name, IReadOnlyDictionary<int, int> worn)
+    private void DiagSaved(OutfitSlot slot)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] saved '{name}' ({Worn(worn)} worn) for {CharacterKey}");
+        _services.Log.Info($"[WardrobeLoadout] saved '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {CharacterKey}");
     }
 
-    private void DiagUpdated(string name, IReadOnlyDictionary<int, int> worn)
+    private void DiagUpdated(OutfitSlot slot)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] updated '{name}' -> current outfit ({Worn(worn)} worn) for {CharacterKey}");
+        _services.Log.Info($"[WardrobeLoadout] updated '{slot.Name}' -> current outfit ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {CharacterKey}");
     }
+
+    // "weapon=<professionId>/<skinId>" for an outfit that carries a skin, else "weapon=none" — so a saved
+    // or applied outfit's skin pair is visible in the log without a second read.
+    private static string Weapon(OutfitSlot slot)
+        => slot.HasWeaponSkin() ? $"weapon={slot.WeaponProfessionId}/{slot.WeaponSkinId}" : "weapon=none";
 
     // Log the per-area dyes chosen for a preview as region:{area=RRGGBB …} so a test can confirm each
     // colour landed on its real EFashionColorAreaType area (Base1-4=1-4, Socks1-4=5-8, BaseEx=9-12,

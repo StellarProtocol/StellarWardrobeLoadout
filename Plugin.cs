@@ -19,10 +19,16 @@ namespace Stellar.WardrobeLoadout;
 /// outfits, plus a window-toggle hotkey. The overlay (<c>Plugin.Overlay.cs</c>) holds an unlimited
 /// scrollable list where outfits are saved / renamed / deleted / reordered / applied.</para>
 ///
+/// <para>An outfit also carries the WEAPON SKIN the player's class was using when it was saved (a
+/// separate per-class game system — <see cref="IWardrobe.GetWornWeaponSkin"/> /
+/// <see cref="IWardrobe.ApplyWeaponSkinAsync"/>, the Wardrobe's Weapon Skin tab). Applying an outfit
+/// re-applies that skin AFTER the outfit switch succeeds (both share the game's one-apply-in-flight
+/// slot); an outfit saved before 1.1.0 carries none and leaves the weapon skin alone.</para>
+///
 /// <para>Outfits are stored per character (keyed by character name) in the plugin config
 /// (<c>System.Text.Json</c> via <see cref="WardrobeStore"/>). Apply success/failure is toasted by the
 /// GAME itself; this plugin toasts only its own guard messages (API-not-ready, empty slot,
-/// switch-in-flight, nothing-to-save) and logs outcomes.</para>
+/// switch-in-flight, nothing-to-save, weapon-skin-failed) and logs outcomes.</para>
 /// </summary>
 public sealed partial class Plugin : IStellarPlugin
 {
@@ -123,12 +129,21 @@ public sealed partial class Plugin : IStellarPlugin
         _ = ApplyAndReportAsync(slot);
     }
 
+    // Outfit first, THEN (only on success) the saved weapon skin. The two share the game's single
+    // apply-in-flight slot, so the outfit switch must be awaited before the skin RPC goes out; a failed
+    // outfit switch sends no skin at all (the player keeps the look they had).
     private async Task ApplyAndReportAsync(OutfitSlot slot)
     {
         try
         {
             var result = await _services.Wardrobe.ApplyAsync(slot.Regions).ConfigureAwait(false);
-            Report(slot, result);
+            WardrobeResult? weapon = null;
+            if (WardrobeRules.ShouldSendWeaponSkin(result == WardrobeResult.Success, slot))
+            {
+                weapon = await _services.Wardrobe
+                    .ApplyWeaponSkinAsync(slot.WeaponProfessionId, slot.WeaponSkinId).ConfigureAwait(false);
+            }
+            Report(slot, result, weapon);
         }
         catch (Exception ex)
         {
@@ -140,12 +155,21 @@ public sealed partial class Plugin : IStellarPlugin
         }
     }
 
-    private void Report(OutfitSlot slot, WardrobeResult result)
+    // One always-on outcome line carrying BOTH results, then the toasts. weapon is null when the outfit
+    // failed (nothing was sent) or the outfit carries no saved skin — the log says which.
+    private void Report(OutfitSlot slot, WardrobeResult result, WardrobeResult? weapon)
     {
-        _services.Log.Info($"[WardrobeLoadout] apply '{slot.Name}' -> {result}");
+        var weaponNote = weapon is { } w ? w.ToString()
+            : slot.HasWeaponSkin() ? "not sent" : "none";
+        _services.Log.Info(
+            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote})");
         if (result == WardrobeResult.Success)
         {
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.applied", slot.Name));
+            if (weapon is { } wr && wr != WardrobeResult.Success)
+            {
+                Toast(NoticeTipType.RedBar, _loc.TFormat("wardrobe.toast.weaponFailed", slot.Name));
+            }
         }
         else if (result is WardrobeResult.Rejected or WardrobeResult.InCombat or WardrobeResult.Timeout)
         {
@@ -155,29 +179,44 @@ public sealed partial class Plugin : IStellarPlugin
         }
     }
 
+    // Everything a saved outfit captures, in one read: the worn pieces, their per-area dyes, and the
+    // class's weapon skin. Returns null when there is nothing to save (wardrobe read not ready, or an
+    // all-zero worn map) — the ONE definition of "empty capture", shared by save and update. The name is
+    // the caller's business (a new save names it; an update keeps the existing name).
+    private OutfitSlot? CaptureCurrent()
+    {
+        var worn = _services.Wardrobe.GetWornOutfit();
+        if (worn is null || AllEmpty(worn)) return null;
+
+        // No weapon skin readable → 0/0, i.e. "this outfit carries none" (applying it leaves the weapon
+        // skin alone) rather than "reset to default" — never touch what we could not read.
+        var weapon = _services.Wardrobe.GetWornWeaponSkin();
+        return new OutfitSlot
+        {
+            Regions = new Dictionary<int, int>(worn),
+            DyeAreas = CaptureDyeAreas(),
+            WeaponProfessionId = weapon?.ProfessionId ?? 0,
+            WeaponSkinId = weapon?.SkinId ?? 0,
+            SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+    }
+
     // Capture the currently worn outfit into a new named slot for the current character. Refuses when
     // the wardrobe read isn't ready or nothing is worn (an all-zero map).
     private bool SaveCurrentOutfit()
     {
-        var worn = _services.Wardrobe.GetWornOutfit();
-        if (worn is null || AllEmpty(worn))
+        if (CaptureCurrent() is not { } captured)
         {
             Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.captureEmpty"));
             return false;
         }
 
         var key = CharacterKey;
-        var name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
-        _store.Add(key, new OutfitSlot
-        {
-            Name = name,
-            Regions = new Dictionary<int, int>(worn),
-            DyeAreas = CaptureDyeAreas(),
-            SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        });
+        captured.Name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
+        _store.Add(key, captured);
         Persist();
-        DiagSaved(name, worn);
-        Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", name));
+        DiagSaved(captured);
+        Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", captured.Name));
         return true;
     }
 

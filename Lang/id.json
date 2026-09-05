@@ -9,6 +9,7 @@
   "wardrobe.toast.updated": "\"{0}\" diperbarui ke kostum Anda saat ini",
   "wardrobe.toast.applied": "Beralih ke \"{0}\"",
   "wardrobe.toast.applyFailed": "Tidak bisa menerapkan \"{0}\"",
+  "wardrobe.toast.weaponFailed": "Tidak bisa menerapkan skin senjata untuk \"{0}\"",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "Simpan kostum saat ini",
   "wardrobe.window.confirmUpdate": "Timpa?",
@@ -18,5 +19,5 @@
   "wardrobe.window.previewLabel": "Pratinjau (arahkan ke baris)",
   "wardrobe.window.empty": "Belum ada kostum tersimpan. Berpakaianlah di dalam game, lalu klik \"Simpan kostum saat ini\".",
   "wardrobe.window.defaultName": "Kostum {0}",
-  "wardrobe.window.help": "Simpan kostum yang sedang Anda kenakan, lalu beralih dengan hotkey (8 slot pertama) atau tombol putar. Tombol baris: ganti nama, perbarui ke kostum saat ini, pindah ke atas, pindah ke bawah, terapkan, hapus. Perbarui dan hapus akan meminta konfirmasi. Kostum disimpan per karakter."
+  "wardrobe.window.help": "Simpan kostum yang sedang Anda kenakan, lalu beralih dengan hotkey (8 slot pertama) atau tombol putar. Tombol baris: ganti nama, perbarui ke kostum saat ini, pindah ke atas, pindah ke bawah, terapkan, hapus. Perbarui dan hapus akan meminta konfirmasi. Kostum disimpan per karakter. Setiap kostum juga mengingat skin senjata kelas Anda dan menerapkannya kembali."
 }
