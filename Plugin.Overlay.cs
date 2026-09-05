@@ -142,8 +142,12 @@ public sealed partial class Plugin
     {
         if (idx == _previewIdx) return;   // already showing this outfit
         if (RowAt(idx) is not { } slot) return;
-        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, slot.Regions, BuildPreviewDyes(slot));
-        DiagPreview(slot);
+        // The weapon skin rides the preview map under key 731 — but only when it belongs to the class we're on
+        // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model.
+        var currentProfessionId = _services.Wardrobe.GetWornWeaponSkin()?.ProfessionId ?? 0;
+        var previewOutfit = WardrobeRules.PreviewOutfit(slot, currentProfessionId);
+        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, previewOutfit, BuildPreviewDyes(slot));
+        DiagPreview(slot, previewOutfit);
         _previewIdx = idx;
         _window?.MarkDirty();
     }

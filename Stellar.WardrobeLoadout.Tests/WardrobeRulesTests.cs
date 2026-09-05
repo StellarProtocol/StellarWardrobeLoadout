@@ -54,6 +54,67 @@ public sealed class WardrobeRulesTests
     // selected rows' tint bands sit at y=227..257 and y=293..323 — 31 px tall, 66 px apart = 2 × 33).
     // The endpoints cover the theme font-scale slider's full 0.8..1.4 range; the rounding is the framework's
     // own (Math.Round = to-even, matching Mathf.RoundToInt in WindowBuilder.Scaled), so 11 × 1.4 = 15.4 → 15.
+    // Owner rule, 2026-09-05 (verbatim): "The 3D preview does not show the weapon skin. <-- it should show
+    // if class match". A weapon skin is per-class, so the preview only carries it under key 731 when the
+    // stored class equals the class the player is on right now. Never weaken: dropping the class test would
+    // ask the model to render another class's weapon; dropping the key would put the bug straight back.
+    private const int WeaponSkinPreviewRegion = 731;
+
+    [Fact]
+    public void Preview_shows_the_weapon_skin_if_class_match()
+    {
+        var outfit = WardrobeRules.PreviewOutfit(WithSkin(9, 7390004), currentProfessionId: 9);
+
+        Assert.Equal(7390004, outfit[WeaponSkinPreviewRegion]);
+    }
+
+    [Fact]
+    public void Preview_omits_the_weapon_skin_when_the_class_differs()
+    {
+        var outfit = WardrobeRules.PreviewOutfit(WithSkin(9, 7390004), currentProfessionId: 1);
+
+        Assert.False(outfit.ContainsKey(WeaponSkinPreviewRegion));
+    }
+
+    [Fact]
+    public void Preview_omits_the_weapon_skin_when_the_outfit_stored_none()
+    {
+        var outfit = WardrobeRules.PreviewOutfit(NoSkin(), currentProfessionId: 9);
+
+        Assert.False(outfit.ContainsKey(WeaponSkinPreviewRegion));
+    }
+
+    // Not in world → GetWornWeaponSkin() is null → the caller passes 0. Never guess a class from the slot.
+    [Fact]
+    public void Preview_omits_the_weapon_skin_when_the_current_class_is_unknown()
+    {
+        var outfit = WardrobeRules.PreviewOutfit(WithSkin(9, 7390004), currentProfessionId: 0);
+
+        Assert.False(outfit.ContainsKey(WeaponSkinPreviewRegion));
+    }
+
+    // A stored 0 is "the class's default look", not "no skin" (HasWeaponSkin keys on the profession id), so
+    // it still travels — the framework resolves it exactly as applying the outfit would.
+    [Fact]
+    public void Preview_carries_a_stored_default_look_as_zero_when_the_class_matches()
+    {
+        var outfit = WardrobeRules.PreviewOutfit(WithSkin(5, 0), currentProfessionId: 5);
+
+        Assert.Equal(0, outfit[WeaponSkinPreviewRegion]);
+    }
+
+    [Fact]
+    public void Preview_copies_the_outfits_regions_untouched_and_does_not_mutate_the_slot()
+    {
+        var slot = WithSkin(9, 7390004);
+
+        var outfit = WardrobeRules.PreviewOutfit(slot, currentProfessionId: 9);
+
+        Assert.Equal(55, outfit[701]);
+        Assert.Equal(2, outfit.Count);                       // the 701 suit + the weapon key, nothing else
+        Assert.False(slot.Regions.ContainsKey(WeaponSkinPreviewRegion));   // the saved outfit is untouched
+    }
+
     [Theory]
     [InlineData(1.0f, 33f)]    // 11      → 11 + 12 + 8 + 2
     [InlineData(0.8f, 31f)]    // 8.8     → 9  + 12 + 8 + 2   (slider minimum)
