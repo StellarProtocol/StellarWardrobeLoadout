@@ -9,6 +9,7 @@
   "wardrobe.toast.updated": "Na-update ang \"{0}\" sa kasalukuyan mong kasuotan",
   "wardrobe.toast.applied": "Nailipat sa \"{0}\"",
   "wardrobe.toast.applyFailed": "Hindi ma-apply ang \"{0}\"",
+  "wardrobe.toast.weaponFailed": "Hindi ma-apply ang weapon skin ng \"{0}\"",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "I-save ang kasalukuyang kasuotan",
   "wardrobe.window.confirmUpdate": "I-overwrite?",
@@ -18,5 +19,5 @@
   "wardrobe.window.previewLabel": "Preview (i-hover ang row)",
   "wardrobe.window.empty": "Wala pang naka-save na kasuotan. Magbihis sa loob ng game, tapos i-click ang \"I-save ang kasalukuyang kasuotan\".",
   "wardrobe.window.defaultName": "Kasuotan {0}",
-  "wardrobe.window.help": "I-save ang kasuotan na suot mo, tapos lumipat dito gamit ang hotkey (unang 8 slots) o ang play button. Mga button sa row: palitan ang pangalan, i-update sa kasalukuyang kasuotan, ilipat pataas, ilipat pababa, i-apply, i-delete. Ang update at delete ay may kumpirmasyon. Naka-save ang kasuotan kada karakter."
+  "wardrobe.window.help": "I-save ang kasuotan na suot mo, tapos lumipat dito gamit ang hotkey (unang 8 slots) o ang play button. Mga button sa row: palitan ang pangalan, i-update sa kasalukuyang kasuotan, ilipat pataas, ilipat pababa, i-apply, i-delete. Ang update at delete ay may kumpirmasyon. Naka-save ang kasuotan kada karakter. Naaalala rin ng bawat kasuotan ang weapon skin ng klase mo at ina-apply ito."
 }

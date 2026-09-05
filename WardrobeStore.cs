@@ -48,19 +48,22 @@ public sealed class WardrobeStore
         return true;
     }
 
-    /// <summary>Re-capture the outfit at <paramref name="index"/> in place: overwrite its regions + dyes
-    /// (clearing the legacy flat dyes — <see cref="OutfitSlot.DyeAreas"/> is authoritative) but KEEP its
-    /// name and slot position. Returns false if out of range.</summary>
-    public bool Update(string characterKey, int index, Dictionary<int, int> regions,
-        Dictionary<int, Dictionary<int, float[]>> dyeAreas, long savedAtMs)
+    /// <summary>Re-capture the outfit at <paramref name="index"/> in place from a freshly
+    /// <paramref name="captured"/> slot: overwrite its regions, per-area dyes and weapon skin (clearing the
+    /// legacy flat dyes — <see cref="OutfitSlot.DyeAreas"/> is authoritative) but KEEP its name and slot
+    /// position. Takes the captured slot whole rather than one parameter per field so adding a captured
+    /// facet (the weapon skin, 1.1.0) never widens the signature. Returns false if out of range.</summary>
+    public bool Update(string characterKey, int index, OutfitSlot captured)
     {
         var list = List(characterKey);
         if (index < 0 || index >= list.Count) return false;
         var slot = list[index];
-        slot.Regions = regions;
-        slot.DyeAreas = dyeAreas;
+        slot.Regions = captured.Regions;
+        slot.DyeAreas = captured.DyeAreas;
         slot.Dyes = new Dictionary<int, float[]>();
-        slot.SavedAtMs = savedAtMs;
+        slot.WeaponProfessionId = captured.WeaponProfessionId;
+        slot.WeaponSkinId = captured.WeaponSkinId;
+        slot.SavedAtMs = captured.SavedAtMs;
         return true;
     }
 
