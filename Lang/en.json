@@ -16,6 +16,7 @@
   "wardrobe.window.confirmDelete": "Delete?",
   "wardrobe.window.pieces": "{0}pc",
   "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.rowBadge": "{0}",
   "wardrobe.window.previewLabel": "Preview (hover a row)",
   "wardrobe.window.empty": "No saved outfits yet. Dress up in-game, then click \"Save current outfit\".",
   "wardrobe.window.defaultName": "Outfit {0}",

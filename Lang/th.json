@@ -16,6 +16,7 @@
   "wardrobe.window.confirmDelete": "ลบ?",
   "wardrobe.window.pieces": "{0} ชิ้น",
   "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.rowBadge": "{0}",
   "wardrobe.window.previewLabel": "ตัวอย่าง (ชี้ที่แถว)",
   "wardrobe.window.empty": "ยังไม่มีชุดที่บันทึกไว้ แต่งตัวในเกมแล้วคลิก \"บันทึกชุดปัจจุบัน\"",
   "wardrobe.window.defaultName": "ชุด {0}",

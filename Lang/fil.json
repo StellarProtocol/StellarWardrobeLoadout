@@ -16,6 +16,7 @@
   "wardrobe.window.confirmDelete": "I-delete?",
   "wardrobe.window.pieces": "{0}pc",
   "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.rowBadge": "{0}",
   "wardrobe.window.previewLabel": "Preview (i-hover ang row)",
   "wardrobe.window.empty": "Wala pang naka-save na kasuotan. Magbihis sa loob ng game, tapos i-click ang \"I-save ang kasalukuyang kasuotan\".",
   "wardrobe.window.defaultName": "Kasuotan {0}",

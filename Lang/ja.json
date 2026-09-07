@@ -16,6 +16,7 @@
   "wardrobe.window.confirmDelete": "削除？",
   "wardrobe.window.pieces": "{0}点",
   "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.rowBadge": "{0}",
   "wardrobe.window.previewLabel": "プレビュー（行にカーソル）",
   "wardrobe.window.empty": "保存された衣装はまだありません。ゲーム内で着替えてから「現在の衣装を保存」をクリックしてください。",
   "wardrobe.window.defaultName": "衣装{0}",
