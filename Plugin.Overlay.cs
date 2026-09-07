@@ -7,7 +7,8 @@ namespace Stellar.WardrobeLoadout;
 
 /// <summary>
 /// The wardrobe overlay: a "Save current outfit" button plus a scroll-windowed list of the current
-/// character's saved outfits — each row shows its hotkey badge (H1..H8 for the first 8), an editable
+/// character's saved outfits — each row shows a badge (hotkey H1..H8 for the first 8, then a plain row
+/// number 9, 10, 11… for the rest), an editable
 /// name, its piece count, and rename / update / reorder / apply / delete controls. Storage + apply logic
 /// live in <see cref="Plugin"/> (<c>Plugin.cs</c> / <see cref="WardrobeStore"/>); this partial is
 /// presentation only. The list is read LIVE from the store (see <c>Rows</c>) so it always reflects the
@@ -373,8 +374,13 @@ public sealed partial class Plugin
     // or the row would act on whichever outfit it happened to show when the window was built.
     private HudElement BuildRow(Func<int> Idx)
     {
+        // Badge column: the first HotkeySlotCount rows show their hotkey (H1..H8); every row past that
+        // shows a plain 1-based position number (9, 10, 11, …) in the SAME column so every outfit is
+        // numbered for reference (requested — makes a long list easier to scan). Empty past the real list.
         var badge = new CellElement(new TextElement(
-            () => Idx() < HotkeySlotCount && RowAt(Idx()) is not null ? _loc.TFormat("wardrobe.window.hotkeyBadge", Idx() + 1) : "",
+            () => RowAt(Idx()) is null ? ""
+                : Idx() < HotkeySlotCount ? _loc.TFormat("wardrobe.window.hotkeyBadge", Idx() + 1)
+                : _loc.TFormat("wardrobe.window.rowBadge", Idx() + 1),
             Muted, NoWrap: true), Width: 28f);
 
         // Name: a LABEL by default; the row being edited swaps to an input field (same width). Wider

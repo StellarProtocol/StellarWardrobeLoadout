@@ -16,6 +16,7 @@
   "wardrobe.window.confirmDelete": "Hapus?",
   "wardrobe.window.pieces": "{0} pcs",
   "wardrobe.window.hotkeyBadge": "H{0}",
+  "wardrobe.window.rowBadge": "{0}",
   "wardrobe.window.previewLabel": "Pratinjau (arahkan ke baris)",
   "wardrobe.window.empty": "Belum ada kostum tersimpan. Berpakaianlah di dalam game, lalu klik \"Simpan kostum saat ini\".",
   "wardrobe.window.defaultName": "Kostum {0}",
