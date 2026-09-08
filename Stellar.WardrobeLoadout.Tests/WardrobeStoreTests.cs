@@ -223,4 +223,17 @@ public sealed class WardrobeStoreTests
         for (var i = 0; i < slots.Count; i++) names[i] = slots[i].Name;
         return names;
     }
+
+    [Fact]
+    public void MigrateNameKeyToCharId_CopiesCurrentCharacterOutfitsOnce()
+    {
+        var store = new WardrobeStore();
+        store.Add("HatsuneMiku", new OutfitSlot { Name = "A" });   // legacy name-keyed
+        var migrated = store.MigrateNameToCharId(name: "HatsuneMiku", charId: "635404");
+        Assert.True(migrated);
+        Assert.Single(store.Get("635404"));                        // copied under the char-id key
+        Assert.Single(store.Get("HatsuneMiku"));                   // legacy entry KEPT (rollback)
+        // idempotent: a char-id entry already present → no re-copy
+        Assert.False(store.MigrateNameToCharId("HatsuneMiku", "635404"));
+    }
 }

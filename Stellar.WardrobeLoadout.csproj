@@ -15,8 +15,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Consumes IWardrobe incl. the weapon-skin API (GetWornWeaponSkin / ApplyWeaponSkinAsync) and
-         VirtualListElement — framework 2.6.0. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.6.0" />
+         VirtualListElement — framework 2.6.0. Bumped to the local dev prerelease for
+         IPlayerIdentity.CharId (Task 1); the release train will land on the real published version. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.6.3-charid-dev" />
     <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
     <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
   </ItemGroup>

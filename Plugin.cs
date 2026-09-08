@@ -99,9 +99,42 @@ public sealed partial class Plugin : IStellarPlugin
         catch { /* disposal must not throw */ }
     }
 
-    // The character the outfits are scoped to. Name is the only stable per-character identifier the
-    // plugin surface exposes; "default" is the fallback before the name resolves.
-    private string CharacterKey => string.IsNullOrEmpty(_services.PlayerState.Name) ? "default" : _services.PlayerState.Name!;
+    // A stable per-character key: the game's char id. Null until it resolves (title / character select /
+    // just after logout) — every store op is a no-op under a null key (never write outfits under an
+    // unknown character; the old name/"default" fallback is gone — it collided across accounts).
+    private string? CharacterKey => _services.PlayerState.CharId != 0 ? _services.PlayerState.CharId.ToString() : null;
+
+    // Latches once the one-time name→char-id migration has been attempted for this plugin session (see
+    // TryMigrateNameToCharId). Ticked from the overlay's per-frame preview hook — the only per-frame hook
+    // this plugin already has — so it fires as soon as the id first resolves without a dedicated poll.
+    private bool _migratedThisSession;
+
+    // Runs once per session, the first time the char id resolves: copies any outfits still sitting under
+    // the legacy name key (or "default") onto the char-id key, keeping the legacy key for rollback (see
+    // WardrobeStore.MigrateNameToCharId). Cheap to call every frame before that: short-circuits on
+    // _migratedThisSession, backed by the store's own idempotency so a re-attempt after a character
+    // switch within the same session can never duplicate an already-migrated char-id entry.
+    private void TryMigrateNameToCharId()
+    {
+        if (_migratedThisSession) return;
+        if (CharacterKey is not { } key) return;
+        _migratedThisSession = true;
+        if (_store.MigrateNameToCharId(_services.PlayerState.Name ?? "", key))
+        {
+            Persist();
+            _services.Log.Info($"[WardrobeLoadout] migrated name-keyed outfits onto char id {key}");
+        }
+    }
+
+    // Every store op (apply/save/rename/update/move/delete) resolves its key through here: the resolved
+    // char id, or null (with a diagnostic naming the op) when it hasn't resolved yet. Centralizes the
+    // "never write outfits under an unknown character" gate so each call site stays a one-liner.
+    private string? ResolveKeyOrSkip(string op)
+    {
+        if (CharacterKey is { } key) return key;
+        DiagStoreSkipped(op);
+        return null;
+    }
 
     // Hotkey n → the n-th saved outfit for the current character (slot position, 1-based).
     private void OnApply(int slotNumber)
@@ -113,7 +146,9 @@ public sealed partial class Plugin : IStellarPlugin
             return;
         }
 
-        var slots = _store.Get(CharacterKey);
+        if (ResolveKeyOrSkip("apply") is not { } key) return;
+
+        var slots = _store.Get(key);
         if (slotNumber - 1 >= slots.Count)
         {
             _services.Log.Info($"[WardrobeLoadout] No outfit in slot {slotNumber}");
@@ -220,11 +255,12 @@ public sealed partial class Plugin : IStellarPlugin
             return false;
         }
 
-        var key = CharacterKey;
+        if (ResolveKeyOrSkip("save") is not { } key) return false;
+
         captured.Name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
         _store.Add(key, captured);
         Persist();
-        DiagSaved(captured);
+        DiagSaved(captured, key);
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", captured.Name));
         return true;
     }
