@@ -25,16 +25,24 @@ public sealed partial class Plugin
         _services.Log.Info($"[WardrobeLoadout] apply slot {slotNumber} skipped: {reason}");
     }
 
-    private void DiagSaved(OutfitSlot slot)
+    // A store op (save/apply/rename/update/move/delete) that was refused because the char id hasn't
+    // resolved yet — never write outfits under an unknown character.
+    private void DiagStoreSkipped(string op)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] saved '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {CharacterKey}");
+        _services.Log.Info($"[WardrobeLoadout] {op} skipped: char unresolved");
     }
 
-    private void DiagUpdated(OutfitSlot slot)
+    private void DiagSaved(OutfitSlot slot, string charKey)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] updated '{slot.Name}' -> current outfit ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {CharacterKey}");
+        _services.Log.Info($"[WardrobeLoadout] saved '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {charKey}");
+    }
+
+    private void DiagUpdated(OutfitSlot slot, string charKey)
+    {
+        if (!StellarDiagnostics.IsEnabled) return;
+        _services.Log.Info($"[WardrobeLoadout] updated '{slot.Name}' -> current outfit ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {charKey}");
     }
 
     // "weapon=<professionId>/<skinId>" for an outfit that carries a skin, else "weapon=none" — so a saved

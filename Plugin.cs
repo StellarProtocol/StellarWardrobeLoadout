@@ -99,9 +99,47 @@ public sealed partial class Plugin : IStellarPlugin
         catch { /* disposal must not throw */ }
     }
 
-    // The character the outfits are scoped to. Name is the only stable per-character identifier the
-    // plugin surface exposes; "default" is the fallback before the name resolves.
-    private string CharacterKey => string.IsNullOrEmpty(_services.PlayerState.Name) ? "default" : _services.PlayerState.Name!;
+    // A stable per-character key: the game's char id. Null until it resolves (title / character select /
+    // just after logout) — every store op is a no-op under a null key (never write outfits under an
+    // unknown character; the old name/"default" fallback is gone — it collided across accounts).
+    private string? CharacterKey => _services.PlayerState.CharId != 0 ? _services.PlayerState.CharId.ToString() : null;
+
+    // Char ids whose one-time name→char-id migration has already been attempted this session (see
+    // TryMigrateNameToCharId). Per-CHARACTER, not per-session: a character with nothing to migrate must
+    // never block a LATER character that DOES have name-keyed outfits — the earlier per-session bool let
+    // a first-seen character (e.g. Rawita, no outfits) latch it so Revette never migrated. Ticked from
+    // the framework Update hook.
+    private readonly HashSet<string> _migratedChars = new();
+
+    // Runs once PER CHARACTER, the first time that character's id resolves: copies any outfits still
+    // sitting under the legacy name key (or "default") onto the char-id key, keeping the legacy key for
+    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every frame — short-circuits on the
+    // per-char set, and the store's own idempotency means a re-attempt can never duplicate an
+    // already-migrated char-id entry.
+    private void TryMigrateNameToCharId()
+    {
+        if (CharacterKey is not { } key) return;
+        if (_migratedChars.Contains(key)) return;
+        // Wait until the NAME is resolved too — CharId can arrive a frame before the char-record name,
+        // and migrating on an empty name finds nothing. Latch ONLY after a real attempt with the name
+        // in hand, so a transient "name not ready yet" frame never permanently latches the character.
+        var name = _services.PlayerState.Name;
+        if (string.IsNullOrEmpty(name)) return;
+        _migratedChars.Add(key);
+        var migrated = _store.MigrateNameToCharId(name, key);
+        if (migrated) Persist();
+        _services.Log.Info($"[WardrobeLoadout] name->charId migrate: char={key} name='{name}' migrated={migrated}");
+    }
+
+    // Every store op (apply/save/rename/update/move/delete) resolves its key through here: the resolved
+    // char id, or null (with a diagnostic naming the op) when it hasn't resolved yet. Centralizes the
+    // "never write outfits under an unknown character" gate so each call site stays a one-liner.
+    private string? ResolveKeyOrSkip(string op)
+    {
+        if (CharacterKey is { } key) return key;
+        DiagStoreSkipped(op);
+        return null;
+    }
 
     // Hotkey n → the n-th saved outfit for the current character (slot position, 1-based).
     private void OnApply(int slotNumber)
@@ -113,7 +151,9 @@ public sealed partial class Plugin : IStellarPlugin
             return;
         }
 
-        var slots = _store.Get(CharacterKey);
+        if (ResolveKeyOrSkip("apply") is not { } key) return;
+
+        var slots = _store.Get(key);
         if (slotNumber - 1 >= slots.Count)
         {
             _services.Log.Info($"[WardrobeLoadout] No outfit in slot {slotNumber}");
@@ -220,11 +260,12 @@ public sealed partial class Plugin : IStellarPlugin
             return false;
         }
 
-        var key = CharacterKey;
+        if (ResolveKeyOrSkip("save") is not { } key) return false;
+
         captured.Name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
         _store.Add(key, captured);
         Persist();
-        DiagSaved(captured);
+        DiagSaved(captured, key);
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", captured.Name));
         return true;
     }

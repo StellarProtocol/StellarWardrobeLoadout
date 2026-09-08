@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Stellar.WardrobeLoadout;
 
@@ -91,4 +92,33 @@ public sealed class WardrobeStore
         }
         return list;
     }
+
+    /// One-time: if the current character's outfits are still under its NAME key (or "default") and it
+    /// has no char-id-keyed entry yet, COPY them to the char-id key. Keeps the name key (rollback).
+    /// Returns true if it copied. Idempotent: a non-empty char-id key short-circuits.
+    public bool MigrateNameToCharId(string name, string charId)
+    {
+        if (string.IsNullOrEmpty(charId)) return false;
+        if (_root.TryGetValue(charId, out var existing) && existing.Count > 0) return false;
+        var src = !string.IsNullOrEmpty(name) && _root.TryGetValue(name, out var byName) && byName.Count > 0 ? byName
+                : _root.TryGetValue("default", out var def) && def.Count > 0 ? def : null;
+        if (src is null) return false;
+        _root[charId] = src.Select(CloneSlot).ToList();   // deep copy; the two keys must not alias
+        return true;
+    }
+
+    /// Deep-copies an <see cref="OutfitSlot"/> so a migrated entry and its legacy source never alias the
+    /// same nested collections (a later Update/Rename on one must not mutate the other).
+    private static OutfitSlot CloneSlot(OutfitSlot slot) => new()
+    {
+        Name = slot.Name,
+        Regions = new Dictionary<int, int>(slot.Regions),
+        Dyes = slot.Dyes.ToDictionary(kv => kv.Key, kv => (float[])kv.Value.Clone()),
+        DyeAreas = slot.DyeAreas.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.ToDictionary(a => a.Key, a => (float[])a.Value.Clone())),
+        WeaponProfessionId = slot.WeaponProfessionId,
+        WeaponSkinId = slot.WeaponSkinId,
+        SavedAtMs = slot.SavedAtMs,
+    };
 }

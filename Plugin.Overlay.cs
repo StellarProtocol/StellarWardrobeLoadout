@@ -12,7 +12,7 @@ namespace Stellar.WardrobeLoadout;
 /// name, its piece count, and rename / update / reorder / apply / delete controls. Storage + apply logic
 /// live in <see cref="Plugin"/> (<c>Plugin.cs</c> / <see cref="WardrobeStore"/>); this partial is
 /// presentation only. The list is read LIVE from the store (see <c>Rows</c>) so it always reflects the
-/// current character's outfits, even before the character name resolves at boot.
+/// current character's outfits, and is empty until the char id resolves at boot.
 ///
 /// <para>The list is a <see cref="VirtualListElement"/>: a small pool of row widgets is recycled over the
 /// logical outfit list as the user scrolls, so the number of outfits it can show is UNBOUNDED. Each pooled
@@ -34,11 +34,10 @@ public sealed partial class Plugin
     private IWindowControl _window = null!;
     private IDisposable? _launcherEntry;
 
-    // The displayed list is read LIVE from the store each frame (keyed by the current character), NOT
-    // cached — so it always reflects the right character's outfits even before the character name resolves
-    // at boot (the old cache read the empty "default" bucket at construction → list looked empty until a
-    // save forced a refresh). A store read is a cheap dict lookup; the overlay only renders when open.
-    private IReadOnlyList<OutfitSlot> Rows => _store.Get(CharacterKey);
+    // The displayed list is read LIVE from the store each frame (keyed by the char id), NOT cached —
+    // empty (never a name/"default" fallback) until CharacterKey resolves. A store read is a cheap dict
+    // lookup; the overlay only renders when open.
+    private IReadOnlyList<OutfitSlot> Rows => CharacterKey is { } key ? _store.Get(key) : Array.Empty<OutfitSlot>();
 
     // Inline rename edit state. The name is a LABEL by default; clicking Edit turns THAT row into an
     // input field (Save/Enter commits it and returns to a label). _editBuffer is kept live by the
@@ -129,9 +128,10 @@ public sealed partial class Plugin
         _hoverDeadline = _tick + HoverDebounceTicks;
     }
 
-    // Debounce tick (framework Update). When a hovered row has settled, load its 3D preview.
+    // Debounce tick (framework Update); also the per-frame hook for TryMigrateNameToCharId (Plugin.cs).
     private void OnPreviewTick(float dt)
     {
+        TryMigrateNameToCharId();
         _tick++;
         if (_hoverPendingIdx < 0 || _tick < _hoverDeadline) return;
         var idx = _hoverPendingIdx;
@@ -244,7 +244,8 @@ public sealed partial class Plugin
     private void CommitRename(int idx)
     {
         var name = _editBuffer?.Trim() ?? "";
-        if (name.Length > 0 && RowAt(idx) is not null && _store.Rename(CharacterKey, idx, name))
+        if (name.Length > 0 && RowAt(idx) is not null && ResolveKeyOrSkip("rename") is { } key
+            && _store.Rename(key, idx, name))
         {
             Persist();
         }
@@ -280,22 +281,23 @@ public sealed partial class Plugin
             Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.captureEmpty"));
             return;
         }
-        if (_store.Update(CharacterKey, idx, captured))
+        if (ResolveKeyOrSkip("update") is not { } key) return;
+        if (_store.Update(key, idx, captured))
         {
             Persist();
-            DiagUpdated(slot);   // slot IS the updated entry (Update overwrites in place)
+            DiagUpdated(slot, key);   // slot IS the updated entry (Update overwrites in place)
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.updated", slot.Name));
             Repaint();
         }
     }
 
-    private void OnMoveUp(int idx)   { if (_store.Move(CharacterKey, idx, -1)) { Persist(); Repaint(); } }
-    private void OnMoveDown(int idx) { if (_store.Move(CharacterKey, idx, +1)) { Persist(); Repaint(); } }
+    private void OnMoveUp(int idx)   { if (ResolveKeyOrSkip("move") is { } key && _store.Move(key, idx, -1)) { Persist(); Repaint(); } }
+    private void OnMoveDown(int idx) { if (ResolveKeyOrSkip("move") is { } key && _store.Move(key, idx, +1)) { Persist(); Repaint(); } }
 
     // Runs on confirm ✓ (which has already cleared the confirm bar).
     private void DoDelete(int idx)
     {
-        if (_store.Delete(CharacterKey, idx)) { Persist(); Repaint(); }
+        if (ResolveKeyOrSkip("delete") is { } key && _store.Delete(key, idx)) { Persist(); Repaint(); }
     }
 
     private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;

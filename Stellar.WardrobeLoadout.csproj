@@ -9,14 +9,15 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.WardrobeLoadout</RootNamespace>
     <AssemblyName>Stellar.WardrobeLoadout</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <!-- Consumes IWardrobe incl. the weapon-skin API (GetWornWeaponSkin / ApplyWeaponSkinAsync) and
-         VirtualListElement — framework 2.6.0. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.6.0" />
+         VirtualListElement — framework 2.6.0. Requires framework 2.6.4 for IPlayerIdentity.CharId
+         (per-character outfits). -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.6.4" />
     <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
     <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
   </ItemGroup>
