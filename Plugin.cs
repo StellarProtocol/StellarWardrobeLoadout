@@ -119,12 +119,16 @@ public sealed partial class Plugin : IStellarPlugin
     private void TryMigrateNameToCharId()
     {
         if (CharacterKey is not { } key) return;
-        if (!_migratedChars.Add(key)) return;   // per-char latch: attempted at most once per character
-        if (_store.MigrateNameToCharId(_services.PlayerState.Name ?? "", key))
-        {
-            Persist();
-            _services.Log.Info($"[WardrobeLoadout] migrated name-keyed outfits onto char id {key}");
-        }
+        if (_migratedChars.Contains(key)) return;
+        // Wait until the NAME is resolved too — CharId can arrive a frame before the char-record name,
+        // and migrating on an empty name finds nothing. Latch ONLY after a real attempt with the name
+        // in hand, so a transient "name not ready yet" frame never permanently latches the character.
+        var name = _services.PlayerState.Name;
+        if (string.IsNullOrEmpty(name)) return;
+        _migratedChars.Add(key);
+        var migrated = _store.MigrateNameToCharId(name, key);
+        if (migrated) Persist();
+        _services.Log.Info($"[WardrobeLoadout] name->charId migrate: char={key} name='{name}' migrated={migrated}");
     }
 
     // Every store op (apply/save/rename/update/move/delete) resolves its key through here: the resolved
