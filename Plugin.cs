@@ -104,21 +104,22 @@ public sealed partial class Plugin : IStellarPlugin
     // unknown character; the old name/"default" fallback is gone — it collided across accounts).
     private string? CharacterKey => _services.PlayerState.CharId != 0 ? _services.PlayerState.CharId.ToString() : null;
 
-    // Latches once the one-time name→char-id migration has been attempted for this plugin session (see
-    // TryMigrateNameToCharId). Ticked from the overlay's per-frame preview hook — the only per-frame hook
-    // this plugin already has — so it fires as soon as the id first resolves without a dedicated poll.
-    private bool _migratedThisSession;
+    // Char ids whose one-time name→char-id migration has already been attempted this session (see
+    // TryMigrateNameToCharId). Per-CHARACTER, not per-session: a character with nothing to migrate must
+    // never block a LATER character that DOES have name-keyed outfits — the earlier per-session bool let
+    // a first-seen character (e.g. Rawita, no outfits) latch it so Revette never migrated. Ticked from
+    // the framework Update hook.
+    private readonly HashSet<string> _migratedChars = new();
 
-    // Runs once per session, the first time the char id resolves: copies any outfits still sitting under
-    // the legacy name key (or "default") onto the char-id key, keeping the legacy key for rollback (see
-    // WardrobeStore.MigrateNameToCharId). Cheap to call every frame before that: short-circuits on
-    // _migratedThisSession, backed by the store's own idempotency so a re-attempt after a character
-    // switch within the same session can never duplicate an already-migrated char-id entry.
+    // Runs once PER CHARACTER, the first time that character's id resolves: copies any outfits still
+    // sitting under the legacy name key (or "default") onto the char-id key, keeping the legacy key for
+    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every frame — short-circuits on the
+    // per-char set, and the store's own idempotency means a re-attempt can never duplicate an
+    // already-migrated char-id entry.
     private void TryMigrateNameToCharId()
     {
-        if (_migratedThisSession) return;
         if (CharacterKey is not { } key) return;
-        _migratedThisSession = true;
+        if (!_migratedChars.Add(key)) return;   // per-char latch: attempted at most once per character
         if (_store.MigrateNameToCharId(_services.PlayerState.Name ?? "", key))
         {
             Persist();
