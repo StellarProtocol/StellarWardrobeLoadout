@@ -9,7 +9,7 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.WardrobeLoadout</RootNamespace>
     <AssemblyName>Stellar.WardrobeLoadout</AssemblyName>
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
@@ -27,6 +27,7 @@
     <EmbeddedResource Include="Lang/th.json"  LogicalName="Stellar.WardrobeLoadout.Lang.th.json" />
     <EmbeddedResource Include="Lang/id.json"  LogicalName="Stellar.WardrobeLoadout.Lang.id.json" />
     <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.WardrobeLoadout.Lang.fil.json" />
+    <EmbeddedResource Include="Lang/ko.json"  LogicalName="Stellar.WardrobeLoadout.Lang.ko.json" />
     <!-- Launcher tile icon (clothes hanger) — white+alpha, tinted by the launcher. -->
     <EmbeddedResource Include="wardrobe-icon.png" LogicalName="Stellar.WardrobeLoadout.wardrobe-icon.png" />
     <!-- Row-action icons — one bold uniform set (white+alpha PNGs, tinted with the theme text colour by
