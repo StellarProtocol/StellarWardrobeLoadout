@@ -10,7 +10,7 @@
   "wardrobe.toast.applied": "전환됨: \"{0}\"",
   "wardrobe.toast.applyFailed": "적용할 수 없습니다: \"{0}\"",
   "wardrobe.toast.weaponFailed": "무기 스킨을 적용할 수 없습니다: \"{0}\"",
-  "wardrobe.window.title": "Wardrobe",
+  "wardrobe.window.title": "옷장",
   "wardrobe.window.saveCurrent": "현재 의상 저장",
   "wardrobe.window.confirmUpdate": "덮어쓰기?",
   "wardrobe.window.confirmDelete": "삭제?",
