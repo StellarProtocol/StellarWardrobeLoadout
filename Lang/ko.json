@@ -1,7 +1,7 @@
 {
   "wardrobe.hotkey.apply": "의상 {0} 적용",
-  "wardrobe.hotkey.windowToggle": "Wardrobe 열기",
-  "wardrobe.toast.apiNotReady": "Wardrobe 아직 준비되지 않음",
+  "wardrobe.hotkey.windowToggle": "옷장 열기",
+  "wardrobe.toast.apiNotReady": "옷장이 아직 준비되지 않음",
   "wardrobe.toast.noSlot": "슬롯 {0}에 저장된 의상 없음",
   "wardrobe.toast.inProgress": "이미 의상 변경 진행 중",
   "wardrobe.toast.captureEmpty": "저장할 의상이 없습니다",
