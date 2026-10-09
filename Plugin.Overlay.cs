@@ -90,8 +90,10 @@ public sealed partial class Plugin
             BuildRoot(),
             OnClose: () => { _window.SetVisiblePersist(false); HidePreview(); }));
 
+        // Title stays the fixed literal "Wardrobe" — the stable pin-identity key (ILauncher.cs:49-50) —
+        // so a pinned tile survives a language change; TitleProvider carries the live-localized display.
         _launcherEntry = _services.Launcher.Register(new LauncherEntry(
-            _loc.T("wardrobe.window.title"), IconPng: LauncherIcon, IconKey: null,
+            "Wardrobe", IconPng: LauncherIcon, IconKey: null,
             OnOpen: ToggleOverlay)
         {
             ShouldShow = () => _services.ClientState.Phase == GamePhase.World,
