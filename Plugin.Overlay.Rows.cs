@@ -68,8 +68,8 @@ public sealed partial class Plugin
             new CellElement(new TextElement(() => _confirmText, Color: () => TextColor(), NoWrap: true, FontSize: 13)
                 { Bold = true, Ellipsize = true }, Weight: 1f),
             new ConditionalElement(() => _confirmKind == ConfirmDelete,
-                Then: DangerRowPill(() => _loc.T("wardrobe.button.delete"), ConfirmYes, ConfirmPillW),
-                Else: CautionRowPill(() => _loc.T("wardrobe.button.replace"), ConfirmYes, ConfirmPillW)),
+                Then: DangerRowPill(() => _loc.T("wardrobe.button.delete"), ConfirmYes, ConfirmPillW, ConfirmGuardOpen, ConfirmRefused),
+                Else: CautionRowPill(() => _loc.T("wardrobe.button.replace"), ConfirmYes, ConfirmPillW, ConfirmGuardOpen, ConfirmRefused)),
             NeutralRowPill(() => _loc.T("wardrobe.button.cancel"), CancelEdits, ConfirmPillW),
         }, Gap: 6f);
 

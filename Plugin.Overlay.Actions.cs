@@ -1,4 +1,5 @@
 using System;
+using Stellar.Abstractions.Diagnostics;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
@@ -134,12 +135,26 @@ public sealed partial class Plugin
         if (Busy || RowAt(idx) is null) return;
         _confirmIdx = idx;
         _confirmKind = kind;
+        _confirmArmedAt = _services.Framework.TimeNow;
+        _confirmGuardPaint = true;
         Repaint();
+    }
+
+    // True once the misclick guard has lapsed (ConfirmGuardSec after the confirm was armed) — the confirm pill's
+    // `enabled`, so before then it is recessed and swallows the click.
+    private bool ConfirmGuardOpen() => _services.Framework.TimeNow - _confirmArmedAt >= ConfirmGuardSec;
+
+    // A confirm-pill click inside the guard window: ignored; traced only with diagnostics on.
+    private void ConfirmRefused()
+    {
+        if (!StellarDiagnostics.IsEnabled) return;
+        _services.Log.Info($"[WardrobeLoadout] confirm click ignored ({_services.Framework.TimeNow - _confirmArmedAt:0.00}s after arming)");
     }
 
     // Confirm pill (Replace / Delete) — run the armed action, then clear the confirm.
     private void ConfirmYes()
     {
+        if (!ConfirmGuardOpen()) { ConfirmRefused(); return; }   // belt and braces: the pill already gates on it
         int idx = _confirmIdx, kind = _confirmKind;
         _confirmIdx = -1;
         _confirmKind = ConfirmNone;

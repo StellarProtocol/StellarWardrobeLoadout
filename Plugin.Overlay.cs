@@ -73,6 +73,14 @@ public sealed partial class Plugin
     private int _confirmIdx = -1;
     private int _confirmKind = ConfirmNone;
 
+    // Misclick guard: the Delete / Replace pill lands exactly where that row's Wear / pencil were, so a quick second
+    // click after ✕ / update would confirm at once (likely how an outfit got lost). The pill ignores clicks (and shows
+    // recessed) for ConfirmGuardSec after arming; _confirmGuardPaint = the tick still owes the one repaint that
+    // raises it again.
+    private const float ConfirmGuardSec = 0.5f;
+    private float _confirmArmedAt;
+    private bool _confirmGuardPaint;
+
     // While a rename or a confirm is open, every OTHER row's actions and the drag reorder are paused: the confirm is
     // armed against a LOGICAL INDEX, so a move (or another delete) underneath it would make it hit a different outfit.
     private bool Busy => _editingIdx >= 0 || _confirmKind != ConfirmNone;
@@ -208,6 +216,7 @@ public sealed partial class Plugin
         }
         if (now >= _nextWornCheck) RefreshWorn();
         if (now >= _nextBadgeRefresh) RefreshBadges();
+        if (_confirmGuardPaint && ConfirmGuardOpen()) { _confirmGuardPaint = false; Repaint(); }
         ExpireFeedback(now);
     }
 

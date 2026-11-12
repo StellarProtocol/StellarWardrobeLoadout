@@ -173,9 +173,10 @@ public sealed partial class Plugin
     // language switch never resizes the pill. `surface` = what the pill sits on, for the recessed label contrast.
     // `enabled` (optional): a disabled pill keeps its geometry, swallows the click and is RECESSED (rule 22).
     // `onHover` (optional): reports hover enter/leave (the OUTFITS caption hint names the hovered action).
+    // `onRefused` (optional): runs instead of `onClick` when a click lands while disabled (the confirm misclick guard).
     private HudElement PillButton(Func<string> label, Func<ColorRgba> fill, Func<ColorRgba> text, Action onClick,
         float labelW, float height, int fontSize, float padX, Func<ColorRgba> surface, Func<bool>? enabled = null,
-        Action<bool>? onHover = null)
+        Action<bool>? onHover = null, Action? onRefused = null)
     {
         var hover = new HoverFlag();
         var disabled = new DisabledLabelCache();
@@ -188,7 +189,7 @@ public sealed partial class Plugin
                     Width: labelW, Align: TextAlign.Center, NoWrap: true, FontSize: fontSize) { Bold = true, Ellipsize = true }),
                 new SpacerElement(padX, height),
             }, Gap: 0.01f, Justify: RowJustify.Center),
-            OnClick: () => { if (En()) onClick(); })
+            OnClick: () => { if (En()) onClick(); else onRefused?.Invoke(); })
             { Bare = true, OnHover = over => { hover.On = over; onHover?.Invoke(over); } })
         {
             // The recessed fill is translucent (blends over the real surface, so it fades with the window already); the
@@ -216,9 +217,9 @@ public sealed partial class Plugin
     private const float RowPillPadX = 4f;
 
     private HudElement RowPill(Func<string> label, Func<ColorRgba> fill, Func<ColorRgba> text, Action onClick,
-        float width, Func<bool>? enabled = null, Action<bool>? onHover = null)
+        float width, Func<bool>? enabled = null, Action<bool>? onHover = null, Action? onRefused = null)
         => PillButton(label, fill, text, onClick, width - 2f * RowPillPadX, RowPillH, 12, RowPillPadX, TileColor,
-            enabled, onHover);
+            enabled, onHover, onRefused);
 
     private HudElement PrimaryRowPill(Func<string> label, Action onClick, float width, Func<bool> enabled,
         Action<bool> onHover)
@@ -227,16 +228,19 @@ public sealed partial class Plugin
         return RowPill(label, PrimaryFill, () => text.Get(PrimaryFill()), onClick, width, enabled, onHover);
     }
 
-    private HudElement DangerRowPill(Func<string> label, Action onClick, float width)
+    private HudElement DangerRowPill(Func<string> label, Action onClick, float width, Func<bool>? enabled = null,
+        Action? onRefused = null)
     {
         var text = new SolidLabelCache();
-        return RowPill(label, DangerFill, () => text.Get(DangerFill()), onClick, width);
+        return RowPill(label, DangerFill, () => text.Get(DangerFill()), onClick, width, enabled, null, onRefused);
     }
 
-    private HudElement CautionRowPill(Func<string> label, Action onClick, float width)
+    private HudElement CautionRowPill(Func<string> label, Action onClick, float width, Func<bool>? enabled = null,
+        Action? onRefused = null)
     {
         var text = new ContrastCache();
-        return RowPill(label, CautionFill, () => text.Get(Menu.Caution, CautionFill(), PillMinContrast), onClick, width);
+        return RowPill(label, CautionFill, () => text.Get(Menu.Caution, CautionFill(), PillMinContrast), onClick, width,
+            enabled, null, onRefused);
     }
 
     private HudElement NeutralRowPill(Func<string> label, Action onClick, float width)
