@@ -10,14 +10,15 @@ namespace Stellar.WardrobeLoadout;
 /// [hanger tile] Wardrobe                              [ Save current outfit ] (?)
 ///               Wearing “X” · N outfits
 /// ┌ OUTFITS ─────────── hint ┐ ┌ PREVIEW ─────────────────────────────────┐
-/// │ 16 rows, drag to reorder │ │ live model (260 × 424)                     │
-/// │                          │ │ name                      7 pieces · …    │
+/// │ 17 rows, drag to reorder │ │ live model (260 × 424)                     │
+/// │                          │ │ outfit name (bold)                         │
+/// │                          │ │ 7 pieces · 2 hidden · weapon skin (muted)  │
 /// │                          │ │ Drag: turn · Shift+drag: move · Wheel: zoom│
 /// └──────────────────────────┘ └────────────────────────────────────────────┘
 /// footer: feedback line, else the hotkey hint
 /// </code>
-/// Every height is fixed (list 16 rows; model + 6 px gap + 16 px gesture hint = list height; 20 px info line mirrored
-/// under the list; 18 px footer), so
+/// Every height is fixed (list 17 rows; model + 22 px details line + 16 px gesture hint, each after a 6 px gap = list
+/// height; 20 px name line mirrored under the list; 18 px footer), so
 /// the window never grows or shrinks with the outfit count, a status change or a feedback line (R14).
 /// </summary>
 public sealed partial class Plugin
@@ -94,10 +95,11 @@ public sealed partial class Plugin
     }, Height: ListHeight) { FixedHeight = true };
 
     // PREVIEW: the hovered outfit on a live self model (transparent backdrop, as the Entity Inspector portrait): drag
-    // rotates, scroll zooms, Shift+drag pans. Under it: bold outfit name + muted "N pieces · weapon skin", then the
-    // muted gesture hint on its own line (amendment 2026-11-13; the caption row is now just PREVIEW). The caption's
-    // hint slot gets a single SPACE, not "": a whitespace string still measures one 14 px line, so this caption row
-    // stays exactly as tall as the OUTFITS one (whose hint always has text while the list shows rows).
+    // rotates, scroll zooms, Shift+drag pans. Under it: bold outfit name, then muted "N pieces · N hidden · weapon
+    // skin" on its own line (2026-11-13), then the muted gesture hint on its own line (amendment 2026-11-13; the
+    // caption row is now just PREVIEW). The caption's hint slot gets a single SPACE, not "": a whitespace string
+    // still measures one 14 px line, so this caption row stays exactly as tall as the OUTFITS one (whose hint always
+    // has text while the list shows rows).
     private HudElement BuildPreviewPanel() => SectionPanel(
         () => _loc.T("wardrobe.panel.preview"), () => " ", MutedColor,
         new RenderTextureHostElement(
@@ -107,15 +109,14 @@ public sealed partial class Plugin
             OnPan: (dx, dy) => _services.WardrobePreview.Pan(dx, dy),
             OnViewportResize: (w, h) => _services.WardrobePreview.SetViewport(w, h),
             TransparentBackground: true),
-        FixedLine(PreviewInfoHeight, new RowElement(new HudElement[]
-        {
-            new CellElement(new TextElement(() => _previewName, Color: () => TextColor(), NoWrap: true, FontSize: 13)
-                { Bold = true, Ellipsize = true }, Weight: 1f),
-            new TextElement(() => _previewInfo, Color: () => MutedColor(), NoWrap: true),
-        }, Gap: 6f)),
+        // Name and details each get a full-width fixed-height line (FixedLine strut + ellipsize), so a long name or
+        // details string never shortens the other or moves anything.
+        FixedLine(PreviewInfoHeight, new TextElement(() => _previewName, Color: () => TextColor(), NoWrap: true,
+            FontSize: 13) { Bold = true, Ellipsize = true }),
+        FixedLine(PreviewDetailsHeight, new TextElement(() => _previewInfo, Color: () => MutedColor(), NoWrap: true)
+            { Ellipsize = true }),
         // Always present (also with nothing hovered), hard-pinned height (TextElement.Height) and ellipsized, so a
-        // long translation can neither wrap nor move the model / name line. Its cost (SectionPanel gap + height) comes
-        // off PreviewH, so the panel height is unchanged.
+        // long translation can neither wrap nor move the model / name lines. PreviewH accounts for it.
         new TextElement(() => _loc.T("wardrobe.preview.gestures"), Color: () => MutedColor(), NoWrap: true, FontSize: 12)
             { Ellipsize = true, Height = PreviewHintHeight });
 

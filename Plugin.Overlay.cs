@@ -22,25 +22,28 @@ namespace Stellar.WardrobeLoadout;
 public sealed partial class Plugin
 {
     // Window geometry (approved prototype): 800 wide, OUTFITS panel 488, PREVIEW panel takes the rest (280 = the 260 px
-    // model + the panel's 2 × 10 padding). The list shows 16 rows at the 28 px pitch and reserves that height, so the
+    // model + the panel's 2 × 10 padding). The list shows 17 rows at the 28 px pitch and reserves that height, so the
     // window never grows or shrinks with the number of outfits (R14).
     private const float WindowWidth = 800f;
     private const float OutfitsPanelWidth = 488f;
-    private const int VisibleRows = 16;
+    private const int VisibleRows = 17;
     private const float ListTileHeight = 26f;
     private const float ListRowGap = 2f;
     private const float ListRowPitch = ListTileHeight + ListRowGap;                  // the VirtualList RowHeight
-    private const float ListHeight = VisibleRows * ListRowPitch - ListRowGap;        // 446: ends flush on a tile
+    private const float ListHeight = VisibleRows * ListRowPitch - ListRowGap;        // 474: ends flush on a tile
     private const int PreviewW = 260;
-    private const float PreviewInfoHeight = 20f;   // the outfit-name line under the model; mirrored under the list
-    // The muted gesture-hint line under the name line (amendment 2026-11-13: it left the PREVIEW caption). The model
-    // gives up exactly that line + its gap, so the PREVIEW panel stays the OUTFITS panel's height and the window
-    // never grows: 446 → 424.
+    private const float PreviewInfoHeight = 20f;   // the bold outfit-name line under the model; mirrored under the list
+    // Under the name: the muted details line ("10 pieces · 9 hidden · weapon skin"), then the muted gesture hint. The
+    // details got their own full-width line (2026-11-13: beside the name they squeezed it to "Outfi…"). The model stays
+    // 424 tall (owner: grow the window, not shrink the model): details line + its gap = exactly one row pitch (22 + 6 =
+    // 28), so the OUTFITS list gains one row (16 → 17) and both panels stay the same height.
     private const float PreviewHintHeight = 16f;
     private const float PreviewHintGap = 6f;       // = SectionPanel's column gap (Plugin.Style.Blocks.cs) — keep in step
-    private const int PreviewH = (int)(ListHeight - PreviewHintGap - PreviewHintHeight);
+    private const float PreviewDetailsHeight = ListRowPitch - PreviewHintGap;   // 22
+    private const int PreviewH = (int)(ListHeight - PreviewHintGap - PreviewHintHeight
+                                       - PreviewHintGap - PreviewDetailsHeight);   // 474 − 22 − 28 = 424
 
-    // Pool size = rows that fit the viewport (16) plus margin for partial rows at both edges. NOT a cap on the outfit
+    // Pool size = rows that fit the viewport (17) plus margin for partial rows at both edges. NOT a cap on the outfit
     // count: the VirtualListElement recycles these over the whole list. (1.0.0 used a fixed 48-row EAGER pool, which
     // silently hid outfit 49 onward — a pool constant must never bound what the user can reach again.)
     private const int PoolRows = 20;

@@ -7,7 +7,7 @@ namespace Stellar.WardrobeLoadout;
 
 /// <summary>
 /// Overlay partial: the hover-driven 3D preview (show / hide, the dye source chosen for it, and the outfit name +
-/// "N pieces · weapon skin" line under the model).
+/// "N pieces · N hidden · weapon skin" lines under the model).
 /// </summary>
 public sealed partial class Plugin
 {
@@ -34,8 +34,8 @@ public sealed partial class Plugin
     }
 
     // Outfit name + "7 pieces · 2 hidden · weapon skin" for the previewed outfit (also re-run after a rename / update
-    // of it). "N hidden" only for an outfit with a saved show/hide state that hides at least one of its pieces; the
-    // line sits in a fixed-height row beside the ellipsized name, so a longer line only shortens the name.
+    // of it). "N hidden" only for an outfit with a saved show/hide state that hides at least one of its pieces. Name and
+    // details sit on two full-width fixed-height lines (each ellipsized), so neither can squeeze the other.
     private void RefreshPreviewInfo()
     {
         if (_previewSlot is not { } slot) { _previewName = _previewInfo = ""; return; }
