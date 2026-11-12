@@ -32,8 +32,13 @@ public sealed partial class Plugin
     private const float ListRowPitch = ListTileHeight + ListRowGap;                  // the VirtualList RowHeight
     private const float ListHeight = VisibleRows * ListRowPitch - ListRowGap;        // 446: ends flush on a tile
     private const int PreviewW = 260;
-    private const int PreviewH = (int)ListHeight;                                    // same height as the list
     private const float PreviewInfoHeight = 20f;   // the outfit-name line under the model; mirrored under the list
+    // The muted gesture-hint line under the name line (amendment 2026-11-13: it left the PREVIEW caption). The model
+    // gives up exactly that line + its gap, so the PREVIEW panel stays the OUTFITS panel's height and the window
+    // never grows: 446 → 424.
+    private const float PreviewHintHeight = 16f;
+    private const float PreviewHintGap = 6f;       // = SectionPanel's column gap (Plugin.Style.Blocks.cs) — keep in step
+    private const int PreviewH = (int)(ListHeight - PreviewHintGap - PreviewHintHeight);
 
     // Pool size = rows that fit the viewport (16) plus margin for partial rows at both edges. NOT a cap on the outfit
     // count: the VirtualListElement recycles these over the whole list. (1.0.0 used a fixed 48-row EAGER pool, which
