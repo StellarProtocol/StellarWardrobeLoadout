@@ -36,7 +36,14 @@ public static class WardrobeRules
     /// <param name="currentProfessionId">The class the player is on right now, or 0 when unknown.</param>
     public static Dictionary<int, int> PreviewOutfit(OutfitSlot slot, int currentProfessionId)
     {
-        var outfit = new Dictionary<int, int>(slot.Regions);
+        var outfit = new Dictionary<int, int>(slot.Regions.Count + 1);
+        // A piece the outfit keeps HIDDEN is left off the preview model, so the preview shows what wearing the outfit
+        // looks like. Outfits saved before the show/hide capture (Hidden == null) preview every piece, as before.
+        foreach (var kv in slot.Regions)
+        {
+            if (slot.Hidden is { } hidden && hidden.TryGetValue(kv.Key, out var h) && h) continue;
+            outfit[kv.Key] = kv.Value;
+        }
         if (currentProfessionId > 0 && slot.HasWeaponSkin() && slot.WeaponProfessionId == currentProfessionId)
             outfit[WeaponSkinPreviewRegion] = slot.WeaponSkinId;
         return outfit;
@@ -75,6 +82,84 @@ public static class WardrobeRules
             n++;
         }
         return n == wornNonZero;
+    }
+
+    /// <summary>Whether an outfit's saved show/hide state should be written after the outfit switch resolved. Same
+    /// gate as the weapon skin: only after a SUCCESSFUL switch (a refused switch leaves the player's look — pieces AND
+    /// visibility — exactly as it was), and only when the outfit carries a state (null = saved before the feature or
+    /// unreadable at save time → the current show/hide is left alone).</summary>
+    /// <param name="outfitSucceeded">True when the outfit switch returned success.</param>
+    /// <param name="slot">The outfit being applied.</param>
+    public static bool ShouldSendHidden(bool outfitSucceeded, OutfitSlot slot)
+        => outfitSucceeded && slot.Hidden is not null;
+
+    /// <summary>The wardrobe regions the game lets the player hide (<c>E.FashionRegion</c>, the order of the game's
+    /// fashion-settings panel). Weapon skin 731 is NOT hideable — the panel never lists it. Knowledge Base
+    /// <c>Fashion-Show-Hide-State.md</c>.</summary>
+    public static readonly int[] HideableRegions = { 701, 702, 703, 711, 712, 713, 714, 715, 716, 717, 718, 721, 722, 723 };
+
+    /// <summary>Marker the Lua read chunk prefixes to the raw setting string, so an EMPTY setting (nothing ever
+    /// hidden = everything shown, a valid state) is told apart from a failed read (the global left nil).</summary>
+    public const char HideReadbackMarker = '#';
+
+    /// <summary>Decode the Lua readback of the game's per-character show/hide setting
+    /// (<c>CharSerialize.settingData.settingMap[201]</c>, format <c>"region=state|region=state|…"</c>, state 2 =
+    /// hidden, 1 or missing = shown) into an explicit region → hidden map covering EVERY hideable region. Returns
+    /// null when the read failed (no marker — the Lua chunk errored or the global was never set): the caller then
+    /// stores no show/hide state rather than a wrong one. Unknown regions (731, garbage ids) and malformed entries
+    /// are ignored; a region the string does not mention is shown, exactly as the game reads it.</summary>
+    /// <param name="readback">The parked Lua global: the marker followed by the raw setting string, or null.</param>
+    public static Dictionary<int, bool>? ParseHidden(string? readback)
+    {
+        if (readback is null || readback.Length == 0 || readback[0] != HideReadbackMarker) return null;
+        var hidden = new Dictionary<int, bool>(HideableRegions.Length);
+        foreach (var region in HideableRegions) hidden[region] = false;
+        foreach (var entry in readback.Substring(1).Split('|'))
+        {
+            var eq = entry.IndexOf('=');
+            if (eq <= 0) continue;
+            if (!int.TryParse(entry.AsSpan(0, eq), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var region)) continue;
+            if (!int.TryParse(entry.AsSpan(eq + 1), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var state)) continue;
+            if (hidden.ContainsKey(region)) hidden[region] = state == 2;
+        }
+        return hidden;
+    }
+
+    /// <summary>The Lua table literal handed to <c>fashion_setting.SetFashionRegionIsHide</c>:
+    /// <c>{[701]=false,[702]=true,…}</c> with an EXPLICIT true/false for every hideable region (a region missing from
+    /// <paramref name="hidden"/> is written shown), so applying an outfit sets the whole show/hide state, never a merge
+    /// with whatever the player toggled since. Only ids from <see cref="HideableRegions"/> are emitted — values we
+    /// control, so the literal cannot carry anything else into Lua.</summary>
+    /// <param name="hidden">The outfit's saved region → hidden map.</param>
+    public static string FormatHideTable(IReadOnlyDictionary<int, bool> hidden)
+    {
+        var sb = new System.Text.StringBuilder(HideableRegions.Length * 12 + 2);
+        sb.Append('{');
+        for (var i = 0; i < HideableRegions.Length; i++)
+        {
+            var region = HideableRegions[i];
+            if (i > 0) sb.Append(',');
+            sb.Append('[').Append(region.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("]=")
+              .Append(hidden.TryGetValue(region, out var h) && h ? "true" : "false");
+        }
+        return sb.Append('}').ToString();
+    }
+
+    /// <summary>How many of the outfit's PIECES it keeps hidden: hidden regions that actually hold a piece. A hidden
+    /// but empty region is not counted — the game string routinely marks empty regions hidden, and "3 hidden" for an
+    /// outfit with nothing to hide would mislead. 0 for an outfit without a saved show/hide state.</summary>
+    /// <param name="slot">The outfit.</param>
+    public static int CountHiddenPieces(OutfitSlot slot)
+    {
+        if (slot.Hidden is not { } hidden) return 0;
+        var n = 0;
+        foreach (var kv in hidden)
+        {
+            if (kv.Value && slot.Regions.TryGetValue(kv.Key, out var id) && id != 0) n++;
+        }
+        return n;
     }
 
     /// <summary>The short label for a bound hotkey in an outfit row's 30 px badge: the binding's own text

@@ -35,6 +35,8 @@
   "wardrobe.preview.pieces": "{0} piraso",
   "wardrobe.preview.pieceOne": "1 piraso",
   "wardrobe.preview.weapon": "weapon skin",
+  "wardrobe.preview.hidden": "{0} nakatago",
+  "wardrobe.preview.hiddenOne": "1 nakatago",
   "wardrobe.confirm.delete": "Burahin ang “{0}”?",
   "wardrobe.confirm.replace": "Palitan ng suot mo ngayon?",
   "wardrobe.button.delete": "Burahin",
@@ -54,5 +56,5 @@
   "wardrobe.empty.title": "Wala pang naka-save na kasuotan",
   "wardrobe.empty.body": "Magbihis sa loob ng game, tapos pindutin ang “I-save ang suot”.",
   "wardrobe.help.label": "Tulong",
-  "wardrobe.help.body": "I-save ang kasuotang suot mo, tapos lumipat dito gamit ang Isuot o ang hotkey. May hotkey ang unang 8 kasuotan; i-set ang mga key sa Settings › Hotkeys. I-drag ang row para palitan ang puwesto nito. Naaalala rin ng bawat kasuotan ang weapon skin ng klase mo. Naka-save ang mga kasuotan kada karakter."
+  "wardrobe.help.body": "I-save ang kasuotang suot mo, tapos lumipat dito gamit ang Isuot o ang hotkey. May hotkey ang unang 8 kasuotan; i-set ang mga key sa Settings › Hotkeys. I-drag ang row para palitan ang puwesto nito. Naaalala rin ng bawat kasuotan ang weapon skin ng klase mo at kung aling mga piraso ang nakatago. Naka-save ang mga kasuotan kada karakter."
 }

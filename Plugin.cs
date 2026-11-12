@@ -201,9 +201,9 @@ public sealed partial class Plugin : IStellarPlugin
         _ = ApplyAndReportAsync(slot);
     }
 
-    // Outfit first, THEN (only on success) the saved weapon skin. The two share the game's single
-    // apply-in-flight slot, so the outfit switch must be awaited before the skin RPC goes out; a failed
-    // outfit switch sends no skin at all (the player keeps the look they had).
+    // Outfit first, THEN (only on success) the saved weapon skin, then the saved show/hide state. The outfit
+    // and the skin share the game's single apply-in-flight slot, so the outfit switch must be awaited before
+    // the skin RPC goes out; a failed outfit switch sends neither (the player keeps the look they had).
     private async Task ApplyAndReportAsync(OutfitSlot slot)
     {
         try
@@ -214,6 +214,14 @@ public sealed partial class Plugin : IStellarPlugin
             {
                 weapon = await _services.Wardrobe
                     .ApplyWeaponSkinAsync(slot.WeaponProfessionId, slot.WeaponSkinId).ConfigureAwait(false);
+            }
+            // Then the outfit's saved show/hide state, under the same success gate. The await resumed off the main
+            // thread and ILua is main-thread only, so it hops back; the table literal is built here (pure string work).
+            if (WardrobeRules.ShouldSendHidden(result == WardrobeResult.Success, slot))
+            {
+                var name = slot.Name;
+                var table = WardrobeRules.FormatHideTable(slot.Hidden!);
+                _services.Framework.Post(() => SendHiddenState(name, table));
             }
             Report(slot, result, weapon);
         }
@@ -236,7 +244,7 @@ public sealed partial class Plugin : IStellarPlugin
         var weaponNote = weapon is { } w ? w.ToString()
             : slot.HasWeaponSkin() ? "not sent" : "none";
         _services.Log.Info(
-            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote})");
+            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote}; show/hide -> {HiddenNote(slot, result == WardrobeResult.Success)})");
         if (result == WardrobeResult.Success)
         {
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.applied", slot.Name));
@@ -254,8 +262,8 @@ public sealed partial class Plugin : IStellarPlugin
         }
     }
 
-    // Everything a saved outfit captures, in one read: the worn pieces, their per-area dyes, and the
-    // class's weapon skin. Returns null when there is nothing to save (wardrobe read not ready, or an
+    // Everything a saved outfit captures, in one read: the worn pieces, their per-area dyes, the
+    // class's weapon skin, and which pieces are hidden. Returns null when there is nothing to save (wardrobe read not ready, or an
     // all-zero worn map) — the ONE definition of "empty capture", shared by save and update. The name is
     // the caller's business (a new save names it; an update keeps the existing name).
     private OutfitSlot? CaptureCurrent()
@@ -272,6 +280,7 @@ public sealed partial class Plugin : IStellarPlugin
             DyeAreas = CaptureDyeAreas(),
             WeaponProfessionId = weapon?.ProfessionId ?? 0,
             WeaponSkinId = weapon?.SkinId ?? 0,
+            Hidden = ReadHiddenState(),   // null when unreadable: the save still goes ahead, without a show/hide state
             SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
     }

@@ -35,6 +35,8 @@
   "wardrobe.preview.pieces": "{0}개",
   "wardrobe.preview.pieceOne": "1개",
   "wardrobe.preview.weapon": "무기 스킨",
+  "wardrobe.preview.hidden": "{0}개 숨김",
+  "wardrobe.preview.hiddenOne": "1개 숨김",
   "wardrobe.confirm.delete": "“{0}”을(를) 삭제할까요?",
   "wardrobe.confirm.replace": "지금 입은 의상으로 바꿀까요?",
   "wardrobe.button.delete": "삭제",
@@ -54,5 +56,5 @@
   "wardrobe.empty.title": "아직 저장된 의상이 없습니다",
   "wardrobe.empty.body": "게임에서 옷을 갈아입은 다음 “현재 의상 저장”을 누르세요.",
   "wardrobe.help.label": "도움말",
-  "wardrobe.help.body": "지금 입은 의상을 저장한 다음 착용 버튼이나 단축키로 전환하세요. 처음 8벌에는 단축키가 있으며, 키는 설정 › 단축키에서 정합니다. 행을 드래그하면 순서를 바꿀 수 있습니다. 각 의상은 클래스의 무기 스킨도 기억합니다. 의상은 캐릭터별로 저장됩니다."
+  "wardrobe.help.body": "지금 입은 의상을 저장한 다음 착용 버튼이나 단축키로 전환하세요. 처음 8벌에는 단축키가 있으며, 키는 설정 › 단축키에서 정합니다. 행을 드래그하면 순서를 바꿀 수 있습니다. 각 의상은 클래스의 무기 스킨과 숨긴 부위도 기억합니다. 의상은 캐릭터별로 저장됩니다."
 }

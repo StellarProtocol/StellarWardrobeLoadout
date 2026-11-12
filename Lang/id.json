@@ -35,6 +35,8 @@
   "wardrobe.preview.pieces": "{0} item",
   "wardrobe.preview.pieceOne": "1 item",
   "wardrobe.preview.weapon": "skin senjata",
+  "wardrobe.preview.hidden": "{0} disembunyikan",
+  "wardrobe.preview.hiddenOne": "1 disembunyikan",
   "wardrobe.confirm.delete": "Hapus “{0}”?",
   "wardrobe.confirm.replace": "Ganti dengan yang sedang dipakai?",
   "wardrobe.button.delete": "Hapus",
@@ -54,5 +56,5 @@
   "wardrobe.empty.title": "Belum ada kostum tersimpan",
   "wardrobe.empty.body": "Berpakaianlah di dalam game, lalu tekan “Simpan yang dipakai”.",
   "wardrobe.help.label": "Bantuan",
-  "wardrobe.help.body": "Simpan kostum yang sedang Anda pakai, lalu beralih ke kostum itu dengan Pakai atau hotkey. 8 kostum pertama punya hotkey; atur tombolnya di Pengaturan › Hotkey. Seret baris untuk mengubah urutannya. Setiap kostum juga mengingat skin senjata kelas Anda. Kostum disimpan per karakter."
+  "wardrobe.help.body": "Simpan kostum yang sedang Anda pakai, lalu beralih ke kostum itu dengan Pakai atau hotkey. 8 kostum pertama punya hotkey; atur tombolnya di Pengaturan › Hotkey. Seret baris untuk mengubah urutannya. Setiap kostum juga mengingat skin senjata kelas Anda dan bagian yang disembunyikan. Kostum disimpan per karakter."
 }

@@ -36,13 +36,13 @@ public sealed partial class Plugin
     private void DiagSaved(OutfitSlot slot, string charKey)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] saved '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {charKey}");
+        _services.Log.Info($"[WardrobeLoadout] saved '{slot.Name}' ({Worn(slot.Regions)} worn, {Weapon(slot)}, {HiddenDiag(slot)}) for {charKey}");
     }
 
     private void DiagUpdated(OutfitSlot slot, string charKey)
     {
         if (!StellarDiagnostics.IsEnabled) return;
-        _services.Log.Info($"[WardrobeLoadout] updated '{slot.Name}' -> current outfit ({Worn(slot.Regions)} worn, {Weapon(slot)}) for {charKey}");
+        _services.Log.Info($"[WardrobeLoadout] updated '{slot.Name}' -> current outfit ({Worn(slot.Regions)} worn, {Weapon(slot)}, {HiddenDiag(slot)}) for {charKey}");
     }
 
     // "weapon=<professionId>/<skinId>" for an outfit that carries a skin, else "weapon=none" — so a saved

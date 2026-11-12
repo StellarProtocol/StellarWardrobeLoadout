@@ -35,6 +35,8 @@
   "wardrobe.preview.pieces": "{0} pieces",
   "wardrobe.preview.pieceOne": "1 piece",
   "wardrobe.preview.weapon": "weapon skin",
+  "wardrobe.preview.hidden": "{0} hidden",
+  "wardrobe.preview.hiddenOne": "1 hidden",
   "wardrobe.confirm.delete": "Delete “{0}”?",
   "wardrobe.confirm.replace": "Replace with what you wear now?",
   "wardrobe.button.delete": "Delete",
@@ -54,5 +56,5 @@
   "wardrobe.empty.title": "No saved outfits yet",
   "wardrobe.empty.body": "Dress up in game, then press “Save current outfit”.",
   "wardrobe.help.label": "Help",
-  "wardrobe.help.body": "Save the outfit you're wearing, then switch to it with Wear or a hotkey. The first 8 outfits have hotkeys; set the keys in Settings › Hotkeys. Drag a row to change its place. Each outfit also remembers your class's weapon skin. Outfits are saved per character."
+  "wardrobe.help.body": "Save the outfit you're wearing, then switch to it with Wear or a hotkey. The first 8 outfits have hotkeys; set the keys in Settings › Hotkeys. Drag a row to change its place. Each outfit also remembers your class's weapon skin and which pieces are hidden. Outfits are saved per character."
 }

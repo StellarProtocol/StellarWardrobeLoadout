@@ -52,8 +52,9 @@ public sealed class WardrobeStore
     /// <summary>Re-capture the outfit at <paramref name="index"/> in place from a freshly
     /// <paramref name="captured"/> slot: overwrite its regions, per-area dyes and weapon skin (clearing the
     /// legacy flat dyes — <see cref="OutfitSlot.DyeAreas"/> is authoritative) but KEEP its name and slot
-    /// position. Takes the captured slot whole rather than one parameter per field so adding a captured
-    /// facet (the weapon skin, 1.1.0) never widens the signature. Returns false if out of range.</summary>
+    /// position. The show/hide state follows the capture too. Takes the captured slot whole rather than one
+    /// parameter per field so adding a captured facet (the weapon skin, 1.1.0; the show/hide state) never widens the
+    /// signature. Returns false if out of range.</summary>
     public bool Update(string characterKey, int index, OutfitSlot captured)
     {
         var list = List(characterKey);
@@ -64,6 +65,7 @@ public sealed class WardrobeStore
         slot.Dyes = new Dictionary<int, float[]>();
         slot.WeaponProfessionId = captured.WeaponProfessionId;
         slot.WeaponSkinId = captured.WeaponSkinId;
+        slot.Hidden = captured.Hidden;   // null when the setting was unreadable at capture time (then applying leaves show/hide alone)
         slot.SavedAtMs = captured.SavedAtMs;
         return true;
     }
@@ -120,6 +122,7 @@ public sealed class WardrobeStore
             kv => kv.Value.ToDictionary(a => a.Key, a => (float[])a.Value.Clone())),
         WeaponProfessionId = slot.WeaponProfessionId,
         WeaponSkinId = slot.WeaponSkinId,
+        Hidden = slot.Hidden is null ? null : new Dictionary<int, bool>(slot.Hidden),
         SavedAtMs = slot.SavedAtMs,
     };
 }

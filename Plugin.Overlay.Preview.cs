@@ -19,7 +19,11 @@ public sealed partial class Plugin
     {
         if (ReferenceEquals(slot, _previewSlot)) return;   // already showing this outfit
         // The weapon skin rides the preview map under key 731 — but only when it belongs to the class we're on
-        // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model.
+        // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model. Pieces the
+        // outfit keeps hidden are left off. ⚠️ Framework limit (2.30.0): the preview model is generated from the
+        // player's social data, which carries the GLOBAL show/hide setting (the model's EWearSetting), and
+        // IWardrobePreview has no way to override it — so a piece the player hides RIGHT NOW cannot be previewed even
+        // when this outfit shows it. Leaving pieces off is the half the plugin can do.
         var currentProfessionId = _services.Wardrobe.GetWornWeaponSkin()?.ProfessionId ?? 0;
         var previewOutfit = WardrobeRules.PreviewOutfit(slot, currentProfessionId);
         _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, previewOutfit, BuildPreviewDyes(slot));
@@ -29,14 +33,20 @@ public sealed partial class Plugin
         _window?.MarkDirty();
     }
 
-    // Outfit name + "7 pieces · weapon skin" for the previewed outfit (also re-run after a rename / update of it).
+    // Outfit name + "7 pieces · 2 hidden · weapon skin" for the previewed outfit (also re-run after a rename / update
+    // of it). "N hidden" only for an outfit with a saved show/hide state that hides at least one of its pieces; the
+    // line sits in a fixed-height row beside the ellipsized name, so a longer line only shortens the name.
     private void RefreshPreviewInfo()
     {
         if (_previewSlot is not { } slot) { _previewName = _previewInfo = ""; return; }
         int n = Worn(slot.Regions);
-        var pieces = n == 1 ? _loc.T("wardrobe.preview.pieceOne") : _loc.TFormat("wardrobe.preview.pieces", n);
+        var info = n == 1 ? _loc.T("wardrobe.preview.pieceOne") : _loc.TFormat("wardrobe.preview.pieces", n);
+        int hidden = WardrobeRules.CountHiddenPieces(slot);
+        if (hidden > 0)
+            info += " · " + (hidden == 1 ? _loc.T("wardrobe.preview.hiddenOne") : _loc.TFormat("wardrobe.preview.hidden", hidden));
+        if (slot.HasWeaponSkin()) info += " · " + _loc.T("wardrobe.preview.weapon");
         _previewName = slot.Name;
-        _previewInfo = slot.HasWeaponSkin() ? pieces + " · " + _loc.T("wardrobe.preview.weapon") : pieces;
+        _previewInfo = info;
     }
 
     // Choose the dye source for a preview: exact per-area (new saves) → legacy flat treated as positional
