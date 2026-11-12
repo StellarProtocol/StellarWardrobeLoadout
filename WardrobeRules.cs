@@ -127,11 +127,13 @@ public static class WardrobeRules
         return hidden;
     }
 
-    /// <summary>The Lua table literal handed to <c>fashion_setting.SetFashionRegionIsHide</c>:
+    /// <summary>The Lua table literal the apply chunk walks into <c>fashion_data:SetFashionSetting(region, isHide)</c>:
     /// <c>{[701]=false,[702]=true,…}</c> with an EXPLICIT true/false for every hideable region (a region missing from
     /// <paramref name="hidden"/> is written shown), so applying an outfit sets the whole show/hide state, never a merge
-    /// with whatever the player toggled since. Only ids from <see cref="HideableRegions"/> are emitted — values we
-    /// control, so the literal cannot carry anything else into Lua.</summary>
+    /// with whatever the player toggled since. That is load-bearing, not tidiness: the live client's save writes its
+    /// local dict AS IS, so a partial table would WIPE the player's other hide settings on the server (Knowledge Base
+    /// <c>Fashion-Show-Hide-State.md</c> "LIVE client differs"). Only ids from <see cref="HideableRegions"/> are
+    /// emitted — values we control, so the literal cannot carry anything else into Lua.</summary>
     /// <param name="hidden">The outfit's saved region → hidden map.</param>
     public static string FormatHideTable(IReadOnlyDictionary<int, bool> hidden)
     {
@@ -145,6 +147,23 @@ public static class WardrobeRules
               .Append(hidden.TryGetValue(region, out var h) && h ? "true" : "false");
         }
         return sb.Append('}').ToString();
+    }
+
+    /// <summary>The last guard before a hide table reaches the game: true only when <paramref name="table"/> names
+    /// EVERY hideable region with an explicit <c>true</c>/<c>false</c>. The apply path refuses anything else — a
+    /// partial table saved through the live client replaces the whole server setting (see
+    /// <see cref="FormatHideTable"/>).</summary>
+    /// <param name="table">A Lua table literal, normally from <see cref="FormatHideTable"/>.</param>
+    public static bool IsCompleteHideTable(string? table)
+    {
+        if (string.IsNullOrEmpty(table)) return false;
+        foreach (var region in HideableRegions)
+        {
+            var key = "[" + region.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]=";
+            if (!table.Contains(key + "true", StringComparison.Ordinal)
+                && !table.Contains(key + "false", StringComparison.Ordinal)) return false;
+        }
+        return true;
     }
 
     /// <summary>How many of the outfit's PIECES it keeps hidden: hidden regions that actually hold a piece. A hidden

@@ -11,10 +11,13 @@ namespace Stellar.WardrobeLoadout;
 /// <para>Both directions go through the framework <c>ILua</c> on the main thread and run only on a user action (save,
 /// replace, wear, hotkey) — never per frame, so a chunk compiled per call is fine (Plugin-Performance-Rules §4).
 /// The READ parks the raw STRING in a global (string readback is the reliable ILua path; a Lua table would not read
-/// back) and the pure-C# <see cref="WardrobeRules.ParseHidden"/> decodes it. The WRITE goes through the game's own
-/// <c>fashion_setting</c> VM (<c>SetFashionRegionIsHide</c>: batch, no toast, fire-and-forget save) rather than the
-/// raw <c>WorldProxy.SaveSetting</c>, because the VM also dispatches the <c>EWearSetting</c> change that refreshes
-/// the local player model.</para>
+/// back) and the pure-C# <see cref="WardrobeRules.ParseHidden"/> decodes it. The WRITE uses the LIVE client's model
+/// (validated in game 2026-11-13 — the decompiled <c>SetFashionRegionIsHide</c> does not exist live, "attempt to call
+/// a nil value"): set every region in the client-side <c>fashion_data</c> dict (<c>SetFashionSetting</c>, no toast),
+/// dispatch <c>FashionAttrChange / EWearSetting</c> so the local model refreshes, then
+/// <c>fashion_setting.SetFashionAllRegionIsHide()</c> (async, in a coroutine) saves that dict to the server. The save
+/// writes the dict AS IS, so all 14 regions are always set — a partial set would wipe the player's other hide
+/// settings server-side.</para>
 /// </summary>
 public sealed partial class Plugin
 {
@@ -58,20 +61,36 @@ public sealed partial class Plugin
 
     // Write an outfit's saved show/hide state (all 14 regions explicit). Posted to the main thread by
     // ApplyAndReportAsync after the outfit switch (and its weapon skin) succeeded. Fire-and-forget like the game's own
-    // toggle; a Lua error is parked and logged so a silent no-op stays visible in the owner's log.
+    // toggle; a Lua error is parked and logged so a silent no-op stays visible in the owner's log. The server save
+    // runs later inside the game's coroutine (xpcall'd by CoroUtil), so its own failure can't be read back here.
     private void SendHiddenState(string outfitName, string hideTable)
     {
         try
         {
+            // Refuse anything but a full 14-region table: the live save writes the client dict as-is, and a partial
+            // dict replaces the player's whole hide setting on the server.
+            if (!WardrobeRules.IsCompleteHideTable(hideTable))
+            {
+                _services.Log.Warning($"[WardrobeLoadout] show/hide for '{outfitName}' refused (table does not set all 14 regions)");
+                return;
+            }
             var lua = _services.Lua;
             if (!lua.Ready)
             {
                 _services.Log.Warning($"[WardrobeLoadout] show/hide for '{outfitName}' not set (Lua not ready)");
                 return;
             }
+            // No statement may start with "(": after a call Lua reads it as a call continuation, hence the plain
+            // Z.X.Y forms and the explicit semicolons.
             lua.DoString(
                 "rawset(_G, '" + HideErrGlobal + "', nil)\n" +
-                "local ok, err = pcall(function() ((Z.VMMgr).GetVM)('fashion_setting').SetFashionRegionIsHide(" + hideTable + ") end)\n" +
+                "local ok, err = pcall(function()\n" +
+                "  local vm = Z.VMMgr.GetVM('fashion_setting'); local fd = Z.DataMgr.Get('fashion_data');\n" +
+                "  for r, h in pairs(" + hideTable + ") do fd:SetFashionSetting(r, h) end;\n" +
+                "  Z.EventMgr:Dispatch(Z.ConstValue.FashionAttrChange, Z.LocalAttr.EWearSetting," +
+                " vm.RegionDictToSettingStr(fd:GetFashionSettingDict()));\n" +
+                "  Z.CoroUtil.create_coro_xpcall(function() vm.SetFashionAllRegionIsHide() end)();\n" +
+                "end)\n" +
                 "if not ok then rawset(_G, '" + HideErrGlobal + "', tostring(err)) end");
             if (lua.ReadGlobalString(HideErrGlobal) is { } err)
                 _services.Log.Warning($"[WardrobeLoadout] show/hide for '{outfitName}' failed: {err}");

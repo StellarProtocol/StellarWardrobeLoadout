@@ -72,6 +72,24 @@ public sealed class HideStateTests
     }
 
     [Fact]
+    public void Format_always_emits_all_14_regions_even_from_an_empty_map()
+    {
+        var table = WardrobeRules.FormatHideTable(new Dictionary<int, bool>());
+        Assert.Equal(14, WardrobeRules.HideableRegions.Length);
+        foreach (var region in WardrobeRules.HideableRegions) Assert.Contains($"[{region}]=false", table);
+        Assert.True(WardrobeRules.IsCompleteHideTable(table));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{[713]=true}")]   // the partial write that wiped the server string in game
+    [InlineData("{[701]=false,[702]=false,[703]=false,[711]=false,[712]=false,[713]=true,[714]=false,[715]=false," +
+                "[716]=false,[717]=false,[718]=false,[721]=false,[722]=false}")]   // 723 missing
+    public void Incomplete_hide_tables_are_refused(string? table)
+        => Assert.False(WardrobeRules.IsCompleteHideTable(table));
+
+    [Fact]
     public void Format_round_trips_a_parsed_state()
     {
         var hidden = WardrobeRules.ParseHidden(Readback(InGame))!;
