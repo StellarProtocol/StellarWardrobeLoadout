@@ -10,7 +10,7 @@ namespace Stellar.WardrobeLoadout;
 /// BCL — no framework dependency — so the mutation logic is unit-testable in isolation.
 ///
 /// <para>Ordering IS the slot order: index 0 is "slot 1" (hotkey H1), and so on; the overlay exposes
-/// rename / update / delete / reorder (up-down) so the user controls which outfits get the first-8
+/// rename / update / delete / drag-reorder so the user controls which outfits get the first-8
 /// hotkeys.</para>
 /// </summary>
 public sealed class WardrobeStore
@@ -68,18 +68,19 @@ public sealed class WardrobeStore
         return true;
     }
 
-    /// <summary>Move the outfit at <paramref name="index"/> by <paramref name="delta"/> positions
-    /// (e.g. -1 = up one slot, +1 = down one slot), clamped to the list. Returns false if out of range
-    /// or the move is a no-op (already at that end).</summary>
-    public bool Move(string characterKey, int index, int delta)
+    /// <summary>Move the outfit at <paramref name="from"/> so it ends up at <paramref name="to"/>, with the
+    /// REMOVE-THEN-INSERT semantics of the overlay's drag reorder (<c>VirtualListElement.OnReorder</c>):
+    /// <paramref name="to"/> is the outfit's index AFTER the move, so the outfits in between shift by one. The
+    /// hotkey badges follow the position, so dropping an outfit at the top makes it hotkey 1. Returns false if
+    /// either index is out of range or the move is a no-op (<paramref name="from"/> == <paramref name="to"/>).
+    /// Never creates an entry for an unknown character.</summary>
+    public bool MoveTo(string characterKey, int from, int to)
     {
-        var list = List(characterKey);
-        if (index < 0 || index >= list.Count) return false;
-        var target = index + delta;
-        if (target < 0 || target >= list.Count || target == index) return false;
-        var slot = list[index];
-        list.RemoveAt(index);
-        list.Insert(target, slot);
+        if (!_root.TryGetValue(characterKey, out var list)) return false;
+        if (from < 0 || from >= list.Count || to < 0 || to >= list.Count || from == to) return false;
+        var slot = list[from];
+        list.RemoveAt(from);
+        list.Insert(to, slot);
         return true;
     }
 

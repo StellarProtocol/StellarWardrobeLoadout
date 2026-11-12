@@ -241,8 +241,8 @@ public sealed partial class Plugin
         }
     }
 
-    private void OnMoveUp(int idx)   { if (ResolveKeyOrSkip("move") is { } key && _store.Move(key, idx, -1)) { Persist(); Repaint(); } }
-    private void OnMoveDown(int idx) { if (ResolveKeyOrSkip("move") is { } key && _store.Move(key, idx, +1)) { Persist(); Repaint(); } }
+    private void OnMoveUp(int idx)   { if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, idx, idx - 1)) { Persist(); Repaint(); } }
+    private void OnMoveDown(int idx) { if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, idx, idx + 1)) { Persist(); Repaint(); } }
 
     // Runs on confirm ✓ (which has already cleared the confirm bar).
     private void DoDelete(int idx)

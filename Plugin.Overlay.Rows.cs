@@ -67,7 +67,7 @@ public sealed partial class Plugin
     // 4+4 vertical padding, and 2 px reproduces the inter-row gap the eager ListElement had → 33 px at
     // scale 1.0 (sandbox-measured, see Stories.WardrobeLoadout). FontScale 0.8..1.4 → 31..37 px.
     // The arithmetic lives in WardrobeRules so it is unit-pinned (WardrobeRulesTests).
-    private float RowHeight => WardrobeRules.RowHeightFor(_services.Theme.Text.FontScale);
+    private float RowHeight => (float)Math.Round(11 * _services.Theme.Text.FontScale) + 22f;
 
     // The recycled row widgets. Each is built ONCE against its pool slot; the logical outfit it shows is
     // resolved per refresh through Idx().

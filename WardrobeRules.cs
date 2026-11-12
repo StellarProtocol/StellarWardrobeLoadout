@@ -42,13 +42,53 @@ public static class WardrobeRules
         return outfit;
     }
 
-    /// <summary>The uniform pooled-row height the overlay's virtual list positions rows on, for a given
-    /// theme <paramref name="fontScale"/>. The tallest thing in a row is an icon chip, whose height is the
-    /// framework's button floor <c>Scaled(11) + 12</c> (the same <c>Round()</c> the framework's
-    /// <c>WindowBuilder.Scaled</c> applies); the <c>SelectableElement</c> wrapper adds its 4 + 4 vertical
-    /// padding, and 2 px reproduces the inter-row gap the previous eager list had. 33 px at scale 1.0;
-    /// the theme slider's 0.8..1.4 range gives 31..37.</summary>
-    /// <param name="fontScale">The theme's font scale (slider range 0.8..1.4).</param>
-    public static float RowHeightFor(float fontScale)
-        => (float)Math.Round(11 * fontScale) + 12f + 8f + 2f;
+    /// <summary>How many regions of <paramref name="outfit"/> hold a piece (a non-zero fashion id).</summary>
+    /// <param name="outfit">A region → fashionId map (0 = empty region).</param>
+    public static int CountNonZero(IReadOnlyDictionary<int, int> outfit)
+    {
+        var n = 0;
+        foreach (var kv in outfit)
+        {
+            if (kv.Value != 0) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Whether a saved outfit is the one being WORN: its non-zero regions equal the worn outfit's
+    /// non-zero regions exactly (same set of regions, same piece in each). Empty regions are ignored on both
+    /// sides, so a saved map that lists a region as 0 and a worn map that omits it still match. Nothing worn
+    /// never matches. Dyes and the weapon skin are not compared: the "Worn" marker is about which clothes are on.
+    /// Allocation-free over the saved map (a concrete <c>Dictionary</c> enumerates without boxing); the caller
+    /// counts the worn side ONCE per check with <see cref="CountNonZero"/> and passes it in, so checking every
+    /// saved outfit walks the worn map once.</summary>
+    /// <param name="saved">The saved outfit's regions.</param>
+    /// <param name="worn">The currently worn region → fashionId map.</param>
+    /// <param name="wornNonZero"><see cref="CountNonZero"/> of <paramref name="worn"/>.</param>
+    public static bool MatchesWorn(Dictionary<int, int> saved, IReadOnlyDictionary<int, int> worn, int wornNonZero)
+    {
+        if (wornNonZero == 0) return false;
+        var n = 0;
+        foreach (var kv in saved)
+        {
+            if (kv.Value == 0) continue;
+            if (!worn.TryGetValue(kv.Key, out var w) || w != kv.Value) return false;
+            n++;
+        }
+        return n == wornNonZero;
+    }
+
+    /// <summary>The short label for a bound hotkey in an outfit row's 30 px badge: the binding's own text
+    /// ("F1", "Ctrl+F2", the framework's Ctrl → Shift → Alt order) with the number-row keys shortened to their
+    /// digit ("Alpha2" → "2") and the keypad keys to "Num" ("Keypad2" → "Num2"), so common bindings fit.</summary>
+    /// <param name="keyName">The primary key's name (<c>StellarKeyCode.ToString()</c>).</param>
+    /// <param name="ctrl">Ctrl held.</param>
+    /// <param name="shift">Shift held.</param>
+    /// <param name="alt">Alt held.</param>
+    public static string ShortKeyLabel(string keyName, bool ctrl, bool shift, bool alt)
+    {
+        var key = keyName.Length == 6 && keyName.StartsWith("Alpha", StringComparison.Ordinal) ? keyName.Substring(5)
+                : keyName.StartsWith("Keypad", StringComparison.Ordinal) ? "Num" + keyName.Substring(6)
+                : keyName;
+        return (ctrl ? "Ctrl+" : "") + (shift ? "Shift+" : "") + (alt ? "Alt+" : "") + key;
+    }
 }
