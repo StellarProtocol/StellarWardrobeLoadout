@@ -14,11 +14,14 @@ public sealed partial class Plugin
 {
     private const string PreviewWeaponKey = "previewWeapon";
 
-    // House "clickable on/off chip" (KB Stellar-Design-Language.md), 84 × 24 here: the label box is the chip minus the
-    // padding either side. Sized for the longest label in any locale ("Weapon: Off", ~70 px bold 12).
-    private const float WeaponChipW = 84f;
+    // House "clickable on/off chip" (KB Stellar-Design-Language.md), 120 × 24 here: the label box is the chip minus the
+    // padding either side. ONE width for both states so nothing jumps on a toggle. Sized from the GAME font, not a
+    // Windows-font measurement: at 84 px "Weapon: Off" (~70 px in Arial) cut to "Weapon:…" in game. Budget bold 12 at
+    // ≈7.5 px/char Latin, 12.5 CJK, 8 Thai; the longest label is id "Senjata: Off" (12 × 7.5 = 90) + 2 × 10 padding
+    // = 110, + ~10 spare = 120. The PREVIEW caption (~280 px, "PREVIEW" ≈ 70) takes up to ~150.
+    private const float WeaponChipW = 120f;
     private const float WeaponChipH = 24f;
-    private const float WeaponChipPadX = 5f;
+    private const float WeaponChipPadX = 10f;
     // Hover = the wash deepened inside the round shape (R2), like the Worn pill; the off chip's rest wash = a faint
     // muted pill so it still reads as pressable (rule 22: pressable = raised fill).
     private const float WeaponChipOffWash = 0.15f;
@@ -50,9 +53,9 @@ public sealed partial class Plugin
     }
 
     // ONE fixed-width cell → a Conditional swapping two COMPLETE chips (never a Conditional inside a bubble's measured
-    // child — the re-hug gotcha), both sharing one hover flag, so the chip is 84 × 24 in both states and nothing moves
+    // child — the re-hug gotcha), both sharing one hover flag, so the chip is 120 × 24 in both states and nothing moves
     // on a toggle. On = bold Success on its 22% wash; Off = bold muted on a faint muted wash. Both labels are bold 12:
-    // the plain (non-bold) path is a fixed 14 px on Menu windows, and "Weapon: Off" at 14 px (~80 px) overflows the chip.
+    // the plain (non-bold) path is a fixed 14 px on Menu windows, and "Weapon: Off" at 14 px would size unlike the bold On label.
     private HudElement WeaponChip()
     {
         var hover = new HoverFlag();
