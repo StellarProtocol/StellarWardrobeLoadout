@@ -111,8 +111,10 @@ public sealed class HideStateTests
     }
 
     [Fact]
-    public void Preview_leaves_hidden_pieces_off_and_keeps_every_piece_for_a_legacy_outfit()
+    public void Preview_keeps_hidden_pieces_in_the_map_because_the_hidden_state_rides_separately()
     {
+        // Framework 2.31.0 applies the outfit's show/hide map itself (IWardrobePreviewOptions.Show `hidden`), so the
+        // outfit map must carry every piece — a hidden one left off could not be shown again by that map.
         var regions = new Dictionary<int, int> { [701] = 55, [713] = 66, [717] = 77 };
         var slot = new OutfitSlot
         {
@@ -120,7 +122,7 @@ public sealed class HideStateTests
             Hidden = new Dictionary<int, bool> { [713] = true, [717] = false, [701] = false },
         };
         var preview = WardrobeRules.PreviewOutfit(slot, 0);
-        Assert.Equal(new[] { 701, 717 }, preview.Keys.OrderBy(k => k));
+        Assert.Equal(new[] { 701, 713, 717 }, preview.Keys.OrderBy(k => k));
         Assert.Equal(3, slot.Regions.Count);                     // the saved outfit itself is untouched
 
         var legacy = new OutfitSlot { Regions = regions };       // Hidden == null

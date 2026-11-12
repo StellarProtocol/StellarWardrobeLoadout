@@ -9,7 +9,7 @@ namespace Stellar.WardrobeLoadout;
 /// <code>
 /// [hanger tile] Wardrobe                              [ Save current outfit ] (?)
 ///               Wearing “X” · N outfits
-/// ┌ OUTFITS ─────────── hint ┐ ┌ PREVIEW ─────────────────────────────────┐
+/// ┌ OUTFITS ─────────── hint ┐ ┌ PREVIEW ─────────────────── [Weapon: On] ┐
 /// │ 17 rows, drag to reorder │ │ live model (260 × 424)                     │
 /// │                          │ │ outfit name (bold)                         │
 /// │                          │ │ 7 pieces · 2 hidden · weapon skin (muted)  │
@@ -96,12 +96,12 @@ public sealed partial class Plugin
 
     // PREVIEW: the hovered outfit on a live self model (transparent backdrop, as the Entity Inspector portrait): drag
     // rotates, scroll zooms, Shift+drag pans. Under it: bold outfit name, then muted "N pieces · N hidden · weapon
-    // skin" on its own line (2026-11-13), then the muted gesture hint on its own line (amendment 2026-11-13; the
-    // caption row is now just PREVIEW). The caption's hint slot gets a single SPACE, not "": a whitespace string
-    // still measures one 14 px line, so this caption row stays exactly as tall as the OUTFITS one (whose hint always
-    // has text while the list shows rows).
-    private HudElement BuildPreviewPanel() => SectionPanel(
-        () => _loc.T("wardrobe.panel.preview"), () => " ", MutedColor,
+    // skin" on its own line (2026-11-13), then the muted gesture hint on its own line (amendment 2026-11-13). Caption
+    // row = PREVIEW + the flexible (empty) hint slot + the Weapon chip at the right end (amendment 2026-11-13). The hint
+    // slot gets a single SPACE, not "": a whitespace string still measures one 14 px line (both caption rows are
+    // pinned to CaptionRowHeight anyway).
+    private HudElement BuildPreviewPanel() => CaptionedPanel(
+        () => _loc.T("wardrobe.panel.preview"), () => " ", MutedColor, WeaponChip(), new HudElement[] {
         new RenderTextureHostElement(
             () => _services.WardrobePreview.Texture, PreviewW, PreviewH,
             OnDrag: (dx, dy) => _services.WardrobePreview.Orbit(dx, dy),
@@ -118,7 +118,7 @@ public sealed partial class Plugin
         // Always present (also with nothing hovered), hard-pinned height (TextElement.Height) and ellipsized, so a
         // long translation can neither wrap nor move the model / name lines. PreviewH accounts for it.
         new TextElement(() => _loc.T("wardrobe.preview.gestures"), Color: () => MutedColor(), NoWrap: true, FontSize: 12)
-            { Ellipsize = true, Height = PreviewHintHeight });
+            { Ellipsize = true, Height = PreviewHintHeight } });
 
     // The header status cuts a very long outfit name (the status line has no width cap of its own).
     private static string ShortName(string name)

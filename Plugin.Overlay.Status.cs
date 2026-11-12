@@ -153,8 +153,10 @@ public sealed partial class Plugin
     private ColorRgba OutfitsHintColor() => _hint != HintNone ? TextColor() : MutedColor();
 
     // ── footer line ───────────────────────────────────────────────────────────────────────────────────────────────
-    // Feedback (green ✓ success / red failure, ~3 s) else a muted hint: the rename keys while renaming, otherwise where
-    // the hotkeys are set.
+    // Feedback (green ✓ success / red failure, ~3 s) else a muted hint: the rename keys while renaming, what the Weapon
+    // chip does while it is hovered, otherwise where the hotkeys are set.
     private bool FooterFeedback => _footerUntil > 0f;
-    private string FooterHint() => _editingIdx >= 0 ? _loc.T("wardrobe.footer.rename") : _loc.T("wardrobe.footer.hotkeys");
+    private string FooterHint() => _editingIdx >= 0 ? _loc.T("wardrobe.footer.rename")
+                                 : _weaponChipHover ? _loc.T("wardrobe.hint.weapon")
+                                 : _loc.T("wardrobe.footer.hotkeys");
 }

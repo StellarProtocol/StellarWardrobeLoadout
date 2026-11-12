@@ -37,13 +37,11 @@ public static class WardrobeRules
     public static Dictionary<int, int> PreviewOutfit(OutfitSlot slot, int currentProfessionId)
     {
         var outfit = new Dictionary<int, int>(slot.Regions.Count + 1);
-        // A piece the outfit keeps HIDDEN is left off the preview model, so the preview shows what wearing the outfit
-        // looks like. Outfits saved before the show/hide capture (Hidden == null) preview every piece, as before.
-        foreach (var kv in slot.Regions)
-        {
-            if (slot.Hidden is { } hidden && hidden.TryGetValue(kv.Key, out var h) && h) continue;
-            outfit[kv.Key] = kv.Value;
-        }
+        // EVERY piece goes in, hidden ones too: since framework 2.31.0 the outfit's saved show/hide map rides the
+        // preview call separately (IWardrobePreviewOptions.Show's `hidden`) and the framework applies it to the model —
+        // including SHOWING a piece the player hides globally right now, which leaving pieces off could never do. An
+        // outfit saved before the show/hide capture (Hidden == null) passes null there = the player's current setting.
+        foreach (var kv in slot.Regions) outfit[kv.Key] = kv.Value;
         if (currentProfessionId > 0 && slot.HasWeaponSkin() && slot.WeaponProfessionId == currentProfessionId)
             outfit[WeaponSkinPreviewRegion] = slot.WeaponSkinId;
         return outfit;

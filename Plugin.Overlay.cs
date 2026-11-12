@@ -112,6 +112,7 @@ public sealed partial class Plugin
 
     private void InitOverlay()
     {
+        LoadPreviewWeaponSetting();
         _window = _services.Windows.Register(new WindowRegistration(
             new WindowSpec(
                 Id:          "wardrobeloadout.window",

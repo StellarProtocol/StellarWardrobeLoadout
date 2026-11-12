@@ -19,14 +19,17 @@ public sealed partial class Plugin
     {
         if (ReferenceEquals(slot, _previewSlot)) return;   // already showing this outfit
         // The weapon skin rides the preview map under key 731 — but only when it belongs to the class we're on
-        // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model. Pieces the
-        // outfit keeps hidden are left off. ⚠️ Framework limit (2.30.0): the preview model is generated from the
-        // player's social data, which carries the GLOBAL show/hide setting (the model's EWearSetting), and
-        // IWardrobePreview has no way to override it — so a piece the player hides RIGHT NOW cannot be previewed even
-        // when this outfit shows it. Leaving pieces off is the half the plugin can do.
+        // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model.
+        // The outfit's OWN show/hide map goes along (framework 2.31.0, IWardrobePreviewOptions): the framework dresses
+        // the model by it — so a piece the player hides globally right now is still shown when this outfit shows it.
+        // An outfit saved before the show/hide capture has Hidden == null = the player's current setting (as before).
+        // ShowWeapon is ONE switch shared by every plugin using the preview service, so it is re-asserted before
+        // every Show, never trusted to still hold this plugin's value.
         var currentProfessionId = _services.Wardrobe.GetWornWeaponSkin()?.ProfessionId ?? 0;
         var previewOutfit = WardrobeRules.PreviewOutfit(slot, currentProfessionId);
-        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, previewOutfit, BuildPreviewDyes(slot));
+        _services.WardrobePreview.ShowWeapon = _previewWeapon;
+        _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, previewOutfit, BuildPreviewDyes(slot),
+            slot.Hidden);
         DiagPreview(slot, previewOutfit);
         _previewSlot = slot;
         RefreshPreviewInfo();

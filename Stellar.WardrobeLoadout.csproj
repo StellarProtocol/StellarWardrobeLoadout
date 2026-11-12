@@ -18,10 +18,13 @@
          IPlayerIdentity.CharId (per-character outfits). 2.30.0 for the house-style window: BubbleElement fills /
          outlines, VirtualListElement.OnReorder + FixedHeight, ImageElement.Tint, theme status colours
          (Success / Danger / Caution), WindowSpec.TitleProvider / Prebuild, HotkeyAction.IsActive. Restores from
-         the local NuGet cache like the other 2.30.0 plugins (ChatTools). -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.30.0" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
+         the local NuGet cache like the other 2.30.0 plugins (ChatTools).
+         2.31.0 for IWardrobePreviewOptions (preview ShowWeapon + the outfit's own show/hide state).
+         TODO: switch all three to 2.31.0 when it is published (and drop the local feed from nuget.config); the
+         -local.wardrobe.1 build comes from ..\local-nuget-feed (framework branch enhance/wardrobe-preview). -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.31.0-local.wardrobe.1" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.31.0-local.wardrobe.1" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.31.0-local.wardrobe.1" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Lang/en.json"  LogicalName="Stellar.WardrobeLoadout.Lang.en.json" />

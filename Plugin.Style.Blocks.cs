@@ -145,16 +145,25 @@ public sealed partial class Plugin
     // A rounded panel (background darkened, live): small bold UPPERCASE caption + a right-aligned hint slot whose text
     // AND colour are live (the OUTFITS hint names the hovered action in the text colour — no tooltips exist, R12), then
     // the children. The hint sits in a weighted cell so a long translation ellipsizes instead of widening the panel.
+    // `trailing` (optional) = a control at the right end of the caption row (the PREVIEW Weapon chip).
+    // The caption row is pinned to CaptionRowHeight in EVERY panel (a 0-width strut, FixedLine): the row with the 24 px
+    // chip and the text-only row are then exactly as tall, so the two side-by-side panels stay the same height and
+    // their contents start on the same line.
+    private const float CaptionRowHeight = 24f;   // = the Weapon chip height (Plugin.Overlay.Weapon.cs)
+
     private HudElement SectionPanel(Func<string> caption, Func<string> hint, Func<ColorRgba> hintColor,
-        params HudElement[] children)
+        params HudElement[] children) => CaptionedPanel(caption, hint, hintColor, null, children);
+
+    private HudElement CaptionedPanel(Func<string> caption, Func<string> hint, Func<ColorRgba> hintColor,
+        HudElement? trailing, HudElement[] children)
     {
+        var captionRow = new HudElement[trailing is null ? 2 : 3];
+        captionRow[0] = new TextElement(Upper(caption), Color: () => MutedColor(), NoWrap: true, FontSize: 12) { Bold = true };
+        captionRow[1] = new CellElement(new TextElement(hint, Color: () => hintColor(), Align: TextAlign.Right, NoWrap: true)
+            { Ellipsize = true }, Weight: 1f);
+        if (trailing is not null) captionRow[2] = trailing;
         var items = new HudElement[children.Length + 1];
-        items[0] = new RowElement(new HudElement[]
-        {
-            new TextElement(Upper(caption), Color: () => MutedColor(), NoWrap: true, FontSize: 12) { Bold = true },
-            new CellElement(new TextElement(hint, Color: () => hintColor(), Align: TextAlign.Right, NoWrap: true)
-                { Ellipsize = true }, Weight: 1f),
-        }, Gap: 6f);
+        items[0] = FixedLine(CaptionRowHeight, new RowElement(captionRow, Gap: 6f));
         Array.Copy(children, 0, items, 1, children.Length);
         return new BubbleElement(new ColumnElement(items, Gap: 6f))
         {
