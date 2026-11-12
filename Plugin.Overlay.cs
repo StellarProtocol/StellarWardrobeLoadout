@@ -6,92 +6,118 @@ using Stellar.Abstractions.Services;
 namespace Stellar.WardrobeLoadout;
 
 /// <summary>
-/// The wardrobe overlay: a "Save current outfit" button plus a scroll-windowed list of the current
-/// character's saved outfits — each row shows a badge (hotkey H1..H8 for the first 8, then a plain row
-/// number 9, 10, 11… for the rest), an editable
-/// name, its piece count, and rename / update / reorder / apply / delete controls. Storage + apply logic
-/// live in <see cref="Plugin"/> (<c>Plugin.cs</c> / <see cref="WardrobeStore"/>); this partial is
-/// presentation only. The list is read LIVE from the store (see <c>Rows</c>) so it always reflects the
-/// current character's outfits, and is empty until the char id resolves at boot.
+/// The wardrobe window (house style, approved prototype 2026-11-13 <c>_scratch/prototypes/wardrobe-redesign-APPROVED</c>):
+/// a ToolHeader (hanger tile · "Wardrobe" · live status · Save current outfit · "?"), then an OUTFITS panel (the
+/// drag-reorderable list) beside a PREVIEW panel (the hovered outfit on a live model), then a one-line footer for
+/// feedback / hints. Storage + apply logic live in <c>Plugin.cs</c> / <see cref="WardrobeStore"/>; this partial owns the
+/// window, its state and the 10 Hz tick. Rows: <c>Plugin.Overlay.Rows.cs</c>; root layout: <c>.Root.cs</c>; actions and
+/// feedback: <c>.Actions.cs</c>; status / badge / label caches: <c>.Status.cs</c>; preview: <c>.Preview.cs</c>.
 ///
-/// <para>The list is a <see cref="VirtualListElement"/>: a small pool of row widgets is recycled over the
-/// logical outfit list as the user scrolls, so the number of outfits it can show is UNBOUNDED. Each pooled
-/// row therefore renders a DIFFERENT outfit from refresh to refresh — every row closure resolves its
-/// logical index through <c>Idx()</c> (= <c>_windowFirst</c> + pool slot), never a captured constant.</para>
+/// <para>The list is a <see cref="VirtualListElement"/>: a small pool of row widgets is recycled over the logical outfit
+/// list as the user scrolls, so the number of outfits it can show is UNBOUNDED. Each pooled row therefore renders a
+/// DIFFERENT outfit from refresh to refresh — every row closure resolves its logical index through <c>Idx()</c>
+/// (= <c>_windowFirst</c> + pool slot), never a captured constant. Per-outfit visual state (preview ring, flash, worn,
+/// hover) is keyed by the OUTFIT (object identity), not the index, so it follows the outfit through a reorder.</para>
 /// </summary>
 public sealed partial class Plugin
 {
-    // Pool size = rows that fit the 460px viewport (≈14 at scale 1.0) plus margin for partial rows at both
-    // edges. NOT a cap on the outfit count: the VirtualListElement recycles these over the whole list.
-    // (1.0.0 used a fixed 48-row EAGER pool, which silently hid outfit 49 onward — Discord "can't scroll
-    // past the 48th outfit". A pool constant must never bound what the user can reach again.)
+    // Window geometry (approved prototype): 800 wide, OUTFITS panel 488, PREVIEW panel takes the rest (280 = the 260 px
+    // model + the panel's 2 × 10 padding). The list shows 16 rows at the 28 px pitch and reserves that height, so the
+    // window never grows or shrinks with the number of outfits (R14).
+    private const float WindowWidth = 800f;
+    private const float OutfitsPanelWidth = 488f;
+    private const int VisibleRows = 16;
+    private const float ListTileHeight = 26f;
+    private const float ListRowGap = 2f;
+    private const float ListRowPitch = ListTileHeight + ListRowGap;                  // the VirtualList RowHeight
+    private const float ListHeight = VisibleRows * ListRowPitch - ListRowGap;        // 446: ends flush on a tile
+    private const int PreviewW = 260;
+    private const int PreviewH = (int)ListHeight;                                    // same height as the list
+    private const float PreviewInfoHeight = 20f;   // the outfit-name line under the model; mirrored under the list
+
+    // Pool size = rows that fit the viewport (16) plus margin for partial rows at both edges. NOT a cap on the outfit
+    // count: the VirtualListElement recycles these over the whole list. (1.0.0 used a fixed 48-row EAGER pool, which
+    // silently hid outfit 49 onward — a pool constant must never bound what the user can reach again.)
     private const int PoolRows = 20;
 
-    // First logical outfit index the pool currently renders — written by the VirtualListElement's OnWindow
-    // BEFORE any row Func is pulled, so a row's Idx() is correct for the frame being drawn.
+    // First logical outfit index the pool currently renders — written by the VirtualListElement's OnWindow BEFORE any
+    // row Func is pulled, so a row's Idx() is correct for the frame being drawn.
     private int _windowFirst;
 
     private IWindowControl _window = null!;
     private IDisposable? _launcherEntry;
+    private IDisposable? _tickScope;
 
-    // The displayed list is read LIVE from the store each frame (keyed by the char id), NOT cached —
-    // empty (never a name/"default" fallback) until CharacterKey resolves. A store read is a cheap dict
-    // lookup; the overlay only renders when open.
+    // The displayed list is read LIVE from the store (keyed by the char id), NOT cached — empty (never a name/"default"
+    // fallback) until CharacterKey resolves. A store read is a cheap dict lookup on a cached key string.
     private IReadOnlyList<OutfitSlot> Rows => CharacterKey is { } key ? _store.Get(key) : Array.Empty<OutfitSlot>();
 
-    // Inline rename edit state. The name is a LABEL by default; clicking Edit turns THAT row into an
-    // input field (Save/Enter commits it and returns to a label). _editBuffer is kept live by the
-    // input's OnChange so the ✓ chip can read the typed value without an Enter first: the framework's
-    // InputElement submits on ENTER ONLY — losing focus does NOT submit (UGuiTextInput registers no
-    // onEndEdit listener; see Stellar.Infrastructure/Game/UGuiTextInput.cs).
-    // With the recycled virtual list this matters: scrolling the row being renamed out of view destroys
-    // its keyboard focus, but the typed text lives in _editBuffer (not in the field), so scrolling back
-    // re-shows it intact — the user finishes by clicking the field again or pressing the ✓ chip.
+    private OutfitSlot? RowAt(int i) { var r = Rows; return i >= 0 && i < r.Count ? r[i] : null; }
+
+    // Inline rename edit state. The name + pieces cells of THAT row become one input (Enter or ✓ commits, ✕ cancels).
+    // _editBuffer is kept live by the input's OnChange so ✓ can read the typed value without an Enter first, and so
+    // scrolling the row out of view (its pooled field is recycled) loses nothing. _focusSeq bumps on every rename start:
+    // the field's FocusRequest takes keyboard focus so the user can type at once.
     private int _editingIdx = -1;
     private string _editBuffer = "";
+    private int _focusSeq;
 
-    // Inline confirm state for the destructive actions (update overwrites the slot; delete removes it). The
-    // framework overlay has no modal popup, so the row's action area swaps to a "Overwrite? / Delete?  ✓ ✗"
-    // bar. Mutually exclusive with the rename edit. 0 = none, 1 = update, 2 = delete.
+    // Inline confirm state for the destructive actions (update overwrites the outfit; delete removes it). The row swaps to
+    // a question + two small pills. Mutually exclusive with the rename edit. 0 = none, 1 = update, 2 = delete.
     private const int ConfirmNone = 0, ConfirmUpdate = 1, ConfirmDelete = 2;
     private int _confirmIdx = -1;
     private int _confirmKind = ConfirmNone;
 
-    // Hover-to-preview state. Hovering a row arms a debounced 3D preview (re-dressing the model loads each
-    // cosmetic's assets, so a short settle avoids thrash when sweeping the mouse). _previewIdx is the outfit
-    // currently shown (also highlights that row).
-    // Pane sized/styled to read like the Entity Inspector's portrait (transparent backdrop, comparable
-    // proportions); the body-framing algorithm is shared (PortraitModelHost). Height aligns with the list.
-    private const int PreviewW = 260;
-    private const int PreviewH = 440;
-    private const long HoverDebounceTicks = 8;   // ~130 ms before the hovered outfit loads
-    private long _tick;
-    private int _hoverPendingIdx = -1;
-    private long _hoverDeadline;
-    private int _previewIdx = -1;
+    // While a rename or a confirm is open, every OTHER row's actions and the drag reorder are paused: the confirm is
+    // armed against a LOGICAL INDEX, so a move (or another delete) underneath it would make it hit a different outfit.
+    private bool Busy => _editingIdx >= 0 || _confirmKind != ConfirmNone;
+
+    // Hover-to-preview state. Hovering a row arms a debounced 3D preview (re-dressing the model loads each cosmetic's
+    // assets, so a short settle avoids thrash when sweeping the mouse); _previewSlot is the outfit currently shown (it
+    // also gets the accent ring). Debounce = IFramework.TimeNow deadline, checked by the 10 Hz tick (≈140–240 ms).
+    private const float HoverDebounceSec = 0.14f;
+    private OutfitSlot? _hoverPending;
+    private float _hoverDeadline;
+    private OutfitSlot? _previewSlot;
+
+    // The saved outfit that equals what the player is wearing (green "Worn" chip + header status), or null. Checked at
+    // ~2 Hz and ONLY while the window is shown (Plugin-Performance-Rules: skip work while hidden).
+    private OutfitSlot? _wornSlot;
+    private float _nextWornCheck;
+    private const float WornCheckSec = 0.5f;
+
+    // The outfit an apply is in flight for (header "Switching to …", all Wear pills recessed). Set on the main thread
+    // when the switch starts, cleared via IFramework.Post when it resolves (the apply completes off the main thread).
+    private OutfitSlot? _switchingSlot;
 
     private void InitOverlay()
     {
         _window = _services.Windows.Register(new WindowRegistration(
             new WindowSpec(
                 Id:          "wardrobeloadout.window",
-                Title:       _loc.T("wardrobe.window.title"),
-                // 540 list column (454 row budget + scroll inset) + 8 gap + (260+8) preview pane + GlassMenu
-                // body padding (24) + margin.
-                DefaultRect: new WindowRect(20f, 120f, 860f, 0f),
+                Title:       "Wardrobe",   // fallback only; TitleProvider carries the live-localized title
+                DefaultRect: new WindowRect(20f, 120f, WindowWidth, 0f),
                 Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.GlassMenu)
             {
                 StartVisible = false, Closable = true, Draggable = true,
                 Anchor = WindowAnchor.TopRight,
+                TitleProvider = () => _loc.T("wardrobe.window.title"),
                 ShouldRender = () => _services.ClientState.Phase == GamePhase.World
                                      && (_services.ClientState.UiState & GameUIState.Loading) == 0,
+                // Built ahead of the first open (structure at the title screen, values once in the world). Every value
+                // lambda here only reads the plugin's own store/caches, the theme and the preview texture handle — safe
+                // whenever the world is up. Re-filled when the character or the outfit count changes while hidden.
+                Prebuild = true,
+                PrebuildSignature = () => Rows.Count * 397 ^ (int)_services.PlayerState.CharId,
             },
             BuildRoot(),
-            OnClose: () => { _window.SetVisiblePersist(false); HidePreview(); }));
+            OnClose: () => { _window.SetVisiblePersist(false); OnWindowHidden(); }));
 
-        // Title stays the fixed literal "Wardrobe" — the stable pin-identity key (ILauncher.cs:49-50) —
-        // so a pinned tile survives a language change; TitleProvider carries the live-localized display.
+        RegisterTipWindow();
+
+        // Title stays the fixed literal "Wardrobe" — the stable pin-identity key (ILauncher.cs:49-50) — so a pinned tile
+        // survives a language change; TitleProvider carries the live-localized display.
         _launcherEntry = _services.Launcher.Register(new LauncherEntry(
             "Wardrobe", IconPng: LauncherIcon, IconKey: null,
             OnOpen: ToggleOverlay)
@@ -101,14 +127,18 @@ public sealed partial class Plugin
         });
 
         _services.WardrobePreview.SetViewport(PreviewW, PreviewH);
-        _services.Framework.Update += OnPreviewTick;
+        // 10 Hz, not per frame: hover debounce, the worn check, badge labels and feedback expiry are all human-speed.
+        _tickScope = _services.Framework.Every(TimeSpan.FromMilliseconds(100), OnTick);
+        _services.ClientState.Logout += OnLogout;
     }
 
     private void DisposeOverlay()
     {
-        _services.Framework.Update -= OnPreviewTick;
+        try { _services.ClientState.Logout -= OnLogout; } catch { /* disposal must not throw */ }
+        try { _tickScope?.Dispose(); } catch { /* disposal must not throw */ }
         HidePreview();
         try { _launcherEntry?.Dispose(); } catch { /* disposal must not throw */ }
+        try { _tipWindow?.Remove(); } catch { /* disposal must not throw */ }
         try { _window?.Remove(); } catch { /* disposal must not throw */ }
     }
 
@@ -118,135 +148,91 @@ public sealed partial class Plugin
         if (_window is null) return;
         var show = !_window.IsShown;
         _window.SetVisiblePersist(show);
-        if (!show) HidePreview();
+        if (show) OnWindowShown();
+        else OnWindowHidden();
     }
 
-    // Row hover-enter arms a debounced preview; hover-leave keeps the last preview (no flicker moving
-    // between rows). The actual load fires from OnPreviewTick once the hover settles.
-    private void OnRowHover(int idx, bool entered)
+    // Fresh data for the first frame: the bound keys, the worn match and the icon scale are only polled while shown.
+    private void OnWindowShown()
     {
-        if (!entered) return;
-        _hoverPendingIdx = idx;
-        _hoverDeadline = _tick + HoverDebounceTicks;
+        RefreshUiScale();
+        RefreshBadges();
+        _nextWornCheck = 0f;
+        RefreshWorn();
     }
 
-    // Debounce tick (framework Update); also the per-frame hook for TryMigrateNameToCharId (Plugin.cs).
-    private void OnPreviewTick(float dt)
+    // Closing drops the preview model, the help tip and any half-finished rename / confirm (a confirm armed against an
+    // index must not survive into a later session of the window).
+    private void OnWindowHidden()
+    {
+        HidePreview();
+        CloseTip();
+        _editingIdx = -1;
+        _confirmIdx = -1;
+        _confirmKind = ConfirmNone;
+    }
+
+    // Logout: hide synchronously (no Post — Update is world-gated, and the phase stays World through the logout
+    // transition, so ShouldRender alone would leave the window up on the loading screen). SetVisible, not
+    // SetVisiblePersist — the same logout close every house tool window does (Stellar-Design-Language §5).
+    private void OnLogout()
+    {
+        try
+        {
+            _window?.SetVisible(false);
+            OnWindowHidden();
+            _switchingSlot = null;
+            _wornSlot = null;
+        }
+        catch { /* never throw from an event */ }
+    }
+
+    // The 10 Hz tick (IFramework.Every). The name→char-id migration check runs ALWAYS (there is no char-changed event);
+    // everything else only while the window is shown.
+    private void OnTick()
     {
         TryMigrateNameToCharId();
-        _tick++;
-        if (_hoverPendingIdx < 0 || _tick < _hoverDeadline) return;
-        var idx = _hoverPendingIdx;
-        _hoverPendingIdx = -1;
-        ShowPreview(idx);
+        if (_window is not { IsShown: true }) return;
+
+        float now = _services.Framework.TimeNow;
+        RefreshUiScale();
+        if (_hoverPending is { } pending && now >= _hoverDeadline)
+        {
+            _hoverPending = null;
+            ShowPreview(pending);
+        }
+        if (now >= _nextWornCheck) RefreshWorn();
+        if (now >= _nextBadgeRefresh) RefreshBadges();
+        ExpireFeedback(now);
+    }
+
+    // Row hover-enter arms a debounced preview; hover-leave keeps the last preview (no flicker moving between rows).
+    // Icon / pill hovers on a row call this too, so pointing at a row's buttons previews it as well.
+    private void OnRowHover(int idx, bool entered)
+    {
+        if (!entered || RowAt(idx) is not { } slot) return;
+        _hoverPending = slot;
+        _hoverDeadline = _services.Framework.TimeNow + HoverDebounceSec;
+    }
+
+    // Which saved outfit is being worn (WardrobeRules.MatchesWorn: same non-zero pieces). One GetWornOutfit read per
+    // check, the worn side counted once, the saved maps walked allocation-free; repaint only when the match changes.
+    private void RefreshWorn()
+    {
+        _nextWornCheck = _services.Framework.TimeNow + WornCheckSec;
+        OutfitSlot? match = null;
+        var rows = Rows;
+        if (rows.Count > 0 && _services.Wardrobe.IsAvailable && _services.Wardrobe.GetWornOutfit() is { } worn)
+        {
+            int nonZero = WardrobeRules.CountNonZero(worn);
+            for (int i = 0; i < rows.Count && match is null; i++)
+                if (WardrobeRules.MatchesWorn(rows[i].Regions, worn, nonZero)) match = rows[i];
+        }
+        if (ReferenceEquals(match, _wornSlot)) return;
+        _wornSlot = match;
+        Repaint();
     }
 
     // Force an immediate repaint after a mutation (the list itself is read live via Rows).
     private void Repaint() => _window?.MarkDirty();
-
-    private OutfitSlot? RowAt(int i) { var r = Rows; return i < r.Count ? r[i] : null; }
-
-    private void OnSaveCurrent()
-    {
-        if (SaveCurrentOutfit()) Repaint();
-    }
-
-    // Turn the row's name into an editable field, seeded with the current name.
-    private void EnterEdit(int idx)
-    {
-        if (RowAt(idx) is not { } slot) return;
-        ClearConfirm();                 // rename and confirm are mutually exclusive
-        _editingIdx = idx;
-        _editBuffer = slot.Name;
-        _window?.MarkDirty();
-    }
-
-    private bool IsConfirming(int idx) => _confirmIdx == idx && _confirmKind != ConfirmNone;
-
-    // Arm the inline confirm for a destructive action on this row (cancels any rename in progress).
-    private void ArmConfirm(int idx, int kind)
-    {
-        if (RowAt(idx) is null) return;
-        _editingIdx = -1;
-        _confirmIdx = idx;
-        _confirmKind = kind;
-        _window?.MarkDirty();
-    }
-
-    private void ClearConfirm()
-    {
-        _confirmIdx = -1;
-        _confirmKind = ConfirmNone;
-        _window?.MarkDirty();
-    }
-
-    // Confirm ✓ — run the armed action, then clear the confirm bar.
-    private void ConfirmYes(int idx)
-    {
-        var kind = _confirmKind;
-        ClearConfirm();
-        if (kind == ConfirmUpdate) DoUpdate(idx);
-        else if (kind == ConfirmDelete) DoDelete(idx);
-    }
-
-    // Persist the edited name (from the live _editBuffer) and return the row to a label. Called by the
-    // Save button AND by the input's Enter/blur Submit — both go through here so they can't disagree.
-    private void CommitRename(int idx)
-    {
-        var name = _editBuffer?.Trim() ?? "";
-        if (name.Length > 0 && RowAt(idx) is not null && ResolveKeyOrSkip("rename") is { } key
-            && _store.Rename(key, idx, name))
-        {
-            Persist();
-        }
-        _editingIdx = -1;
-        Repaint();
-    }
-
-    private bool IsEditing(int idx) => _editingIdx == idx;
-
-    private void OnApplyRow(int idx)
-    {
-        if (RowAt(idx) is not { } slot) return;
-        if (!_services.Wardrobe.IsAvailable)
-        {
-            Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.apiNotReady"));
-            return;
-        }
-        ApplyOutfit(slot);
-    }
-
-    // Re-capture the outfit the player is WEARING now into this slot (keeps its name + position, and
-    // refreshes its dyes and weapon skin). Same guards as Save current outfit. Runs on confirm ✓.
-    private void DoUpdate(int idx)
-    {
-        if (RowAt(idx) is not { } slot) return;
-        if (!_services.Wardrobe.IsAvailable)
-        {
-            Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.apiNotReady"));
-            return;
-        }
-        if (CaptureCurrent() is not { } captured)
-        {
-            Toast(NoticeTipType.RedBar, _loc.T("wardrobe.toast.captureEmpty"));
-            return;
-        }
-        if (ResolveKeyOrSkip("update") is not { } key) return;
-        if (_store.Update(key, idx, captured))
-        {
-            Persist();
-            DiagUpdated(slot, key);   // slot IS the updated entry (Update overwrites in place)
-            Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.updated", slot.Name));
-            Repaint();
-        }
-    }
-
-    private void OnMoveUp(int idx)   { if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, idx, idx - 1)) { Persist(); Repaint(); } }
-    private void OnMoveDown(int idx) { if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, idx, idx + 1)) { Persist(); Repaint(); } }
-
-    // Runs on confirm ✓ (which has already cleared the confirm bar).
-    private void DoDelete(int idx)
-    {
-        if (ResolveKeyOrSkip("delete") is { } key && _store.Delete(key, idx)) { Persist(); Repaint(); }
-    }
 }

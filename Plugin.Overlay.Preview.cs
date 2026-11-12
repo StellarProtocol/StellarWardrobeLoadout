@@ -6,23 +6,37 @@ using Stellar.Abstractions.Services;
 namespace Stellar.WardrobeLoadout;
 
 /// <summary>
-/// Overlay partial: the hover-driven 3D preview (show / hide, and the dye source chosen for it). Split out
-/// of <c>Plugin.Overlay.cs</c> for the 500-LoC file gate — a pure move.
+/// Overlay partial: the hover-driven 3D preview (show / hide, the dye source chosen for it, and the outfit name +
+/// "N pieces · weapon skin" line under the model).
 /// </summary>
 public sealed partial class Plugin
 {
-    private void ShowPreview(int idx)
+    // The line under the model, built when the preview changes (an event), never per poll.
+    private string _previewName = "";
+    private string _previewInfo = "";
+
+    private void ShowPreview(OutfitSlot slot)
     {
-        if (idx == _previewIdx) return;   // already showing this outfit
-        if (RowAt(idx) is not { } slot) return;
+        if (ReferenceEquals(slot, _previewSlot)) return;   // already showing this outfit
         // The weapon skin rides the preview map under key 731 — but only when it belongs to the class we're on
         // now (owner rule 2026-09-05); a skin is per-class, so another class's cannot render on this model.
         var currentProfessionId = _services.Wardrobe.GetWornWeaponSkin()?.ProfessionId ?? 0;
         var previewOutfit = WardrobeRules.PreviewOutfit(slot, currentProfessionId);
         _services.WardrobePreview.Show(_services.CombatSnapshot.LocalEntityId, previewOutfit, BuildPreviewDyes(slot));
         DiagPreview(slot, previewOutfit);
-        _previewIdx = idx;
+        _previewSlot = slot;
+        RefreshPreviewInfo();
         _window?.MarkDirty();
+    }
+
+    // Outfit name + "7 pieces · weapon skin" for the previewed outfit (also re-run after a rename / update of it).
+    private void RefreshPreviewInfo()
+    {
+        if (_previewSlot is not { } slot) { _previewName = _previewInfo = ""; return; }
+        int n = Worn(slot.Regions);
+        var pieces = n == 1 ? _loc.T("wardrobe.preview.pieceOne") : _loc.TFormat("wardrobe.preview.pieces", n);
+        _previewName = slot.Name;
+        _previewInfo = slot.HasWeaponSkin() ? pieces + " · " + _loc.T("wardrobe.preview.weapon") : pieces;
     }
 
     // Choose the dye source for a preview: exact per-area (new saves) → legacy flat treated as positional
@@ -58,8 +72,9 @@ public sealed partial class Plugin
 
     private void HidePreview()
     {
-        _hoverPendingIdx = -1;
-        _previewIdx = -1;
+        _hoverPending = null;
+        _previewSlot = null;
+        _previewName = _previewInfo = "";
         try { _services.WardrobePreview.Hide(); } catch { /* never throw */ }
     }
 }

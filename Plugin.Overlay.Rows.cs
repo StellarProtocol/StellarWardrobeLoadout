@@ -1,76 +1,31 @@
 using System;
-using System.Collections.Generic;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
 namespace Stellar.WardrobeLoadout;
 
 /// <summary>
-/// Overlay partial: the row-action icons, the pooled list rows and the window root. Split out of
-/// <c>Plugin.Overlay.cs</c> for the 500-LoC file gate — a pure move.
+/// Overlay partial: the pooled OUTFITS rows (approved prototype). One row = a 26 px raised tile, 2 px apart:
+/// <c>grip · badge · name · "N pcs" (+ sword mark) · Wear · rename · update · ✕</c>. States swap whole parts of the row
+/// (rename → one input; delete / update confirm → a question + two small pills) so nothing else moves.
 /// </summary>
 public sealed partial class Plugin
 {
-    private ColorRgba? Muted() => _services.Theme.Colors.MenuMuted;
+    private const float GripCellW = 10f;
+    private const float BadgeW = 30f;
+    private const float BadgeH = 20f;
+    private const float PiecesCellW = 74f;
+    private const float WearW = 58f;
+    private const float ConfirmPillW = 66f;
+    private const float RenameInputW = 248f;   // = name (168) + gap (6) + pieces (74): the input replaces both cells
 
-    // Row-action icons — one bold, uniform image set (the overlay font renders most of these poorly at this
-    // size). Loaded once from embedded resources; the framework tints each with the theme text colour.
-    // Launcher tile icon (clothes hanger) — replaces the generic puzzle-piece fallback.
-    private static readonly byte[]? LauncherIcon = LoadEmbeddedIcon("Stellar.WardrobeLoadout.wardrobe-icon.png");
+    private readonly ContrastCache _badgeText = new();
+    private readonly ContrastCache _removeGlyph = new();
+    private readonly ContrastCache _flashGood = new(), _flashBad = new();
+    private string _confirmText = "";
 
-    private static byte[]? Icon(string n) => LoadEmbeddedIcon($"Stellar.WardrobeLoadout.Icons.{n}.png");
-    private static readonly byte[]? EditIcon = Icon("edit");
-    private static readonly byte[]? SaveIcon = Icon("save");        // also the confirm ✓
-    private static readonly byte[]? RefreshIcon = Icon("refresh");
-    private static readonly byte[]? UpIcon = Icon("up");
-    private static readonly byte[]? DownIcon = Icon("down");
-    private static readonly byte[]? ApplyIcon = Icon("apply");
-    private static readonly byte[]? TrashIcon = Icon("trash");
-    private static readonly byte[]? CancelIcon = Icon("cancel");    // the confirm ✗
-
-    private static byte[]? LoadEmbeddedIcon(string name)
-    {
-        try
-        {
-            using var s = typeof(Plugin).Assembly.GetManifestResourceStream(name);
-            if (s is null) return null;
-            using var ms = new System.IO.MemoryStream();
-            s.CopyTo(ms);
-            return ms.ToArray();
-        }
-        catch { return null; }
-    }
-
-    // Compact toolbar-chip icon button, icon-only. Outline style = a defined accent border with a
-    // near-transparent interior, so the (light) icon sits on the DARK row for high contrast — a light Glass
-    // fill washes the icon out on a dark theme ("blended in"). Empty label → the framework centres the PNG.
-    private static ButtonElement IconChip(byte[]? png, Action onClick, Func<bool>? enabled = null)
-        => new(() => "", onClick, Enabled: enabled, Style: MenuButtonStyle.Outline, Width: 30f, Icon: () => png);
-
-    // Placeholder for a hidden end-cap reorder arrow (top row has no up, last row no down) — keeps the
-    // column aligned without showing an inert button.
-    private static TextElement Empty() => new(() => "");
-
-    // A row action is available when the row exists, it is NOT the row currently being renamed (so a
-    // reorder / update / delete / apply can't race an in-progress rename edit), and NO confirm is armed on
-    // ANY row. That last term matters because the confirm is armed against a LOGICAL INDEX: arm Delete on
-    // row 5, then press ▼ on row 4, and rows 4 and 5 swap — the pending ✓ would delete the outfit that
-    // moved into slot 5, i.e. the wrong one. Freezing every row's actions while a confirm is pending keeps
-    // "the row you armed" and "the row that gets hit" the same row. (Edit is NOT gated on this: EnterEdit
-    // clears the armed confirm before it starts a rename.)
-    private bool RowActionable(int idx)
-        => RowAt(idx) is not null && !IsEditing(idx) && _confirmKind == ConfirmNone;
-
-    // Uniform pooled-row height the VirtualListElement positions rows on. The tallest thing in a row is an
-    // icon chip, whose height is the framework's button floor Scaled(11)+12 (= 23 at FontScale 1.0, the
-    // scale is Round()ed exactly as WindowBuilder.Scaled does); the SelectableElement wrapper adds its
-    // 4+4 vertical padding, and 2 px reproduces the inter-row gap the eager ListElement had → 33 px at
-    // scale 1.0 (sandbox-measured, see Stories.WardrobeLoadout). FontScale 0.8..1.4 → 31..37 px.
-    // The arithmetic lives in WardrobeRules so it is unit-pinned (WardrobeRulesTests).
-    private float RowHeight => (float)Math.Round(11 * _services.Theme.Text.FontScale) + 22f;
-
-    // The recycled row widgets. Each is built ONCE against its pool slot; the logical outfit it shows is
-    // resolved per refresh through Idx().
+    // The recycled row widgets. Each is built ONCE against its pool slot; the logical outfit it shows is resolved per
+    // refresh through Idx().
     private HudElement[] BuildRowPool()
     {
         var pool = new HudElement[PoolRows];
@@ -82,127 +37,202 @@ public sealed partial class Plugin
         return pool;
     }
 
-    // One pooled row. Idx() = the LOGICAL outfit index this widget renders on the current refresh
-    // (_windowFirst + its pool slot) — EVERY closure below must go through it, never a captured constant,
-    // or the row would act on whichever outfit it happened to show when the window was built.
+    // One pooled row. Idx() = the LOGICAL outfit index this widget renders on the current refresh — EVERY closure
+    // below must go through it (or Item()), never a captured constant.
     private HudElement BuildRow(Func<int> Idx)
     {
-        // Badge column: the first HotkeySlotCount rows show their hotkey (H1..H8); every row past that
-        // shows a plain 1-based position number (9, 10, 11, …) in the SAME column so every outfit is
-        // numbered for reference (requested — makes a long list easier to scan). Empty past the real list.
-        var badge = new CellElement(new TextElement(
-            () => RowAt(Idx()) is null ? ""
-                : Idx() < HotkeySlotCount ? _loc.TFormat("wardrobe.window.hotkeyBadge", Idx() + 1)
-                : _loc.TFormat("wardrobe.window.rowBadge", Idx() + 1),
-            Muted, NoWrap: true), Width: 28f);
-
-        // Name: a LABEL by default; the row being edited swaps to an input field (same width). Wider
-        // than before — the icon buttons freed the space, so long outfit names read fully.
-        var name = new CellElement(new ConditionalElement(
-            () => IsEditing(Idx()),
-            Then: new InputElement(() => _editBuffer, _ => CommitRename(Idx()), Width: 178f, OnChange: s => _editBuffer = s),
-            Else: new TextElement(() => RowAt(Idx())?.Name ?? "", NoWrap: true)), Width: 180f);
-
-        var pieces = new CellElement(new TextElement(
-            () => RowAt(Idx()) is { } s ? _loc.TFormat("wardrobe.window.pieces", Worn(s.Regions)) : "",
-            Muted, NoWrap: true), Width: 40f);
-
-        var row = new RowElement(new HudElement[] { badge, name, pieces, BuildActions(Idx) }, Gap: 6f);
-        // Wrap in a Selectable so hovering the row loads its 3D preview (OnHover) and the previewed
-        // row highlights (Selected). Row-click is a no-op — the per-cell buttons own the actions.
-        return new SelectableElement(row, OnClick: () => { }, Selected: () => _previewIdx == Idx())
+        OutfitSlot? Item() => RowAt(Idx());
+        var normal = new RowElement(new HudElement[]
         {
-            OnHover = on => OnRowHover(Idx(), on),
-        };
-    }
-
-    // The row's right-hand action area: six icon chips (rename, update, up, down, apply, delete), swapped
-    // for the inline confirm bar while this row awaits a yes/no on a destructive action.
-    private HudElement BuildActions(Func<int> Idx)
-    {
-        // Edit ↔ Save (rename): pencil / check icons.
-        var editSave = new CellElement(new ConditionalElement(
-            () => IsEditing(Idx()),
-            Then: IconChip(SaveIcon, () => CommitRename(Idx())),
-            Else: IconChip(EditIcon, () => EnterEdit(Idx()), () => RowAt(Idx()) is not null)), Width: 32f);
-
-        // Update (refresh) — re-capture the worn outfit into this slot; ARMS a confirm. Disabled while renaming.
-        var update = new CellElement(
-            IconChip(RefreshIcon, () => ArmConfirm(Idx(), ConfirmUpdate), () => RowActionable(Idx())), Width: 32f);
-
-        // Reorder (triangles) — HIDDEN at the ends (no up on the first row, no down on the last), disabled while renaming.
-        var up = new CellElement(new ConditionalElement(
-            () => Idx() > 0,
-            Then: IconChip(UpIcon, () => OnMoveUp(Idx()), () => RowActionable(Idx())),
-            Else: Empty()), Width: 32f);
-        var down = new CellElement(new ConditionalElement(
-            () => Idx() < Rows.Count - 1,
-            Then: IconChip(DownIcon, () => OnMoveDown(Idx()), () => RowActionable(Idx())),
-            Else: Empty()), Width: 32f);
-
-        // Apply (play) / Delete (trash → ARMS a confirm) — disabled while renaming.
-        var apply = new CellElement(IconChip(ApplyIcon, () => OnApplyRow(Idx()), () => RowActionable(Idx())), Width: 32f);
-        var del = new CellElement(IconChip(TrashIcon, () => ArmConfirm(Idx(), ConfirmDelete), () => RowActionable(Idx())), Width: 32f);
-
-        var iconRow = new RowElement(new HudElement[] { editSave, update, up, down, apply, del }, Gap: 6f);
-
-        // Inline confirm bar (no modal in the overlay): "Overwrite? / Delete?" + confirm ✓ + cancel ✗,
-        // replacing the icon row for the row awaiting confirmation. The outfit name stays visible alongside.
-        var confirmBar = new RowElement(new HudElement[]
-        {
-            new CellElement(new TextElement(
-                () => _confirmKind == ConfirmUpdate ? _loc.T("wardrobe.window.confirmUpdate") : _loc.T("wardrobe.window.confirmDelete"),
-                NoWrap: true), Width: 78f),
-            new CellElement(IconChip(SaveIcon,   () => ConfirmYes(Idx())), Width: 32f),
-            new CellElement(IconChip(CancelIcon, () => ClearConfirm()),    Width: 32f),
+            new CellElement(new ConditionalElement(() => IsEditing(Idx()),
+                Then: new RowElement(new HudElement[] { Grip(), Badge(Idx), RenameInput(Idx) }, Gap: 6f),
+                Else: new SelectableElement(new RowElement(new HudElement[]
+                    {
+                        Grip(), Badge(Idx),
+                        new CellElement(new TextElement(() => Item()?.Name ?? "", Color: () => TextColor(), NoWrap: true,
+                            FontSize: 13) { Bold = true, Ellipsize = true }, Weight: 1f),
+                        PiecesCell(Item),
+                    }, Gap: 6f),
+                    OnClick: () => { })   // the row itself only previews on hover; its buttons own the actions
+                    { Bare = true, OnHover = over => OnRowHover(Idx(), over) }), Weight: 1f),
+            WearCell(Idx, Item),
+            RenameButton(Idx, Item),
+            UpdateButton(Idx, Item),
+            DeleteButton(Idx, Item),
         }, Gap: 6f);
 
-        return new CellElement(new ConditionalElement(
-            () => IsConfirming(Idx()), Then: confirmBar, Else: iconRow), Width: 224f);
+        var confirm = new RowElement(new HudElement[]
+        {
+            new SpacerElement(GripCellW, 1f),   // the grip column stays, empty (no drag while confirming)
+            Badge(Idx),
+            new CellElement(new TextElement(() => _confirmText, Color: () => TextColor(), NoWrap: true, FontSize: 13)
+                { Bold = true, Ellipsize = true }, Weight: 1f),
+            new ConditionalElement(() => _confirmKind == ConfirmDelete,
+                Then: DangerRowPill(() => _loc.T("wardrobe.button.delete"), ConfirmYes, ConfirmPillW),
+                Else: CautionRowPill(() => _loc.T("wardrobe.button.replace"), ConfirmYes, ConfirmPillW)),
+            NeutralRowPill(() => _loc.T("wardrobe.button.cancel"), CancelEdits, ConfirmPillW),
+        }, Gap: 6f);
+
+        return RowTile(Idx, Item, new ConditionalElement(() => IsConfirming(Idx()), Then: confirm, Else: normal));
     }
 
-    private HudElement BuildRoot()
+    // ── the tile ──────────────────────────────────────────────────────────────────────────────────────────────────
+    // Outer bubble = the row fill + a 1 px ring; inner bubble (1 px in) = a second 1 px ring. Both rings on = the 2 px
+    // accent ring of the previewed row (BubbleElement draws only 1 px outlines); only the outer one = the 1 px green /
+    // red ring of a flash or a delete confirm. 24 px strut + 1 px padding each side = the 26 px tile, and the slot is
+    // [tile, 2 px spacer] so the VirtualList (which stretches its child to the 28 px pitch) leaves a real gap (R15).
+    private HudElement RowTile(Func<int> Idx, Func<OutfitSlot?> Item, HudElement content)
     {
-        var pool = BuildRowPool();
-
-        var help = new TextElement(() => _loc.T("wardrobe.window.help"), Muted);
-
-        var saveButton = new ButtonElement(
-            () => _loc.T("wardrobe.window.saveCurrent"), OnSaveCurrent, Width: 200f);
-
-        // Scroll-windowed: the pool recycles over Rows.Count logical outfits, so the list reaches ALL of
-        // them (the eager ListElement showed at most pool-size rows). The virtual list brings its own
-        // scroll viewport — no ScrollElement wrapper. RowHeight is read once at build (the record takes a
-        // float); a FontScale change re-skins text but keeps this pitch until the window is rebuilt.
-        var list = new ConditionalElement(
-            () => Rows.Count > 0,
-            Then: new VirtualListElement(() => Rows.Count, RowHeight, pool, first => _windowFirst = first, Height: 460f),
-            Else: new TextElement(() => _loc.T("wardrobe.window.empty"), Muted));
-
-        // 3D preview pane (right): shows the hovered outfit on a live self model. Drag rotates, scroll
-        // zooms, Shift+drag pans — same interaction model as the Entity Inspector's portrait. Transparent
-        // backdrop so only the character draws (no dark box), matching the inspector.
-        var previewPane = new ColumnElement(new HudElement[]
+        var inner = new BubbleElement(new RowElement(new HudElement[]
         {
-            new TextElement(() => _loc.T("wardrobe.window.previewLabel"), Muted),
-            new RenderTextureHostElement(
-                () => _services.WardrobePreview.Texture, PreviewW, PreviewH,
-                OnDrag: (dx, dy) => _services.WardrobePreview.Orbit(dx, dy),
-                OnScroll: d => _services.WardrobePreview.Zoom(d),
-                OnPan: (dx, dy) => _services.WardrobePreview.Pan(dx, dy),
-                OnViewportResize: (w, h) => _services.WardrobePreview.SetViewport(w, h),
-                TransparentBackground: true),
-        }, Gap: 4f);
-
-        var listAndPreview = new RowElement(new HudElement[]
+            new SpacerElement(3f, ListTileHeight - 2f),   // + the outer 1 px = the mockup's 4 px left inset
+            new CellElement(content, Weight: 1f),
+        }, Gap: 0.01f))
         {
-            new CellElement(list, Width: 540f),
-            new CellElement(previewPane, Width: PreviewW + 8f),
-        }, Gap: 8f);
-
-        return new ColumnElement(new HudElement[]
+            FillColorFn = () => Transparent,
+            OutlineColorFn = () => RingPreviewed(Idx, Item) ? Fade(AccentColor()) : null,
+            CornerRadius = TileRadius - 1f, PaddingX = 0f, PaddingY = 0f,
+        };
+        var tile = new BubbleElement(new ColumnElement(new HudElement[] { inner }, Gap: 0.01f))
         {
-            help, new SeparatorElement(), saveButton, new SeparatorElement(), listAndPreview,
-        }, Gap: 8f);
+            FillColorFn = () => Fade(RowFill(Idx, Item)),
+            OutlineColorFn = () => RowRing(Idx, Item) is { } c ? Fade(c) : null,
+            CornerRadius = TileRadius, PaddingX = 1f, PaddingY = 1f,
+        };
+        return new ColumnElement(new HudElement[] { tile, new SpacerElement(0f, ListRowGap) }, Gap: 0.01f);
+    }
+
+    private bool RowAlarm(Func<int> Idx, Func<OutfitSlot?> Item)
+        => (Flashing(Item()) && !_flashOk) || (IsConfirming(Idx()) && _confirmKind == ConfirmDelete);
+
+    private ColorRgba RowFill(Func<int> Idx, Func<OutfitSlot?> Item)
+        => Flashing(Item()) && _flashOk ? Over(SuccessColor() with { A = ChipWashAlpha }, TileColor())
+         : RowAlarm(Idx, Item) ? Over(DangerColor() with { A = 0.20f }, TileColor())
+         : TileColor();
+
+    private ColorRgba? RowRing(Func<int> Idx, Func<OutfitSlot?> Item)
+        => Flashing(Item()) && _flashOk ? SuccessColor()
+         : RowAlarm(Idx, Item) ? DangerColor()
+         : RingPreviewed(Idx, Item) ? AccentColor() : null;
+
+    private bool RingPreviewed(Func<int> Idx, Func<OutfitSlot?> Item)
+        => Item() is { } s && ReferenceEquals(s, _previewSlot) && !Flashing(s) && !IsConfirming(Idx());
+
+    // ── cells ─────────────────────────────────────────────────────────────────────────────────────────────────────
+    // Drag grip (6 × 14 dots, centred in a 10 px column). Purely a cue: the whole row drags (VirtualList OnReorder).
+    private HudElement Grip() => new CellElement(new RowElement(new HudElement[]
+    {
+        Glyph(GripIcon, () => TextColor() with { A = Busy ? 0.25f : 0.55f }, GripW),
+    }, Gap: 0.01f, Justify: RowJustify.Center), Width: GripCellW);
+
+    // 30 × 20 badge (fixed cell, R10): rows 1–8 = the slot hotkey (bound key or "H<n>") as an accent chip; rows 9+ =
+    // the plain muted number, same cell (transparent chip).
+    private HudElement Badge(Func<int> Idx) => new CellElement(new BubbleElement(new RowElement(new HudElement[]
+        {
+            new SpacerElement(0f, BadgeH),
+            new TextElement(() => BadgeText(Idx()), Color: () => Idx() < HotkeySlotCount
+                    ? _badgeText.Get(AccentColor(), BadgeFill(), PillMinContrast) : MutedColor(),
+                Width: BadgeW, Align: TextAlign.Center, NoWrap: true, FontSize: 11)
+                { Bold = true, Ellipsize = true, DynamicFontSize = () => BadgeFontSize(Idx()) },
+        }, Gap: 0.01f, Justify: RowJustify.Center))
+    {
+        FillColorFn = () => Idx() < HotkeySlotCount ? Fade(BadgeFill()) : Transparent,
+        CornerRadius = RoundRadius(BadgeH), PaddingX = 0f, PaddingY = 0f,
+    }, Width: BadgeW);
+
+    private ColorRgba BadgeFill() => Over(AccentColor() with { A = ChipWashAlpha }, TileColor());
+
+    // "9 pcs" + the sword mark when the outfit carries a weapon skin (transparent otherwise, so nothing moves); during a
+    // flash the cell shows the bold "Saved" / "Not now" instead (bold can't toggle live → two complete variants).
+    private HudElement PiecesCell(Func<OutfitSlot?> Item) => new CellElement(new ConditionalElement(
+        () => Flashing(Item()),
+        Then: new TextElement(() => _flashText, Color: () => _flashOk
+                ? _flashGood.Get(SuccessColor(), RowFillFlash(true), PillMinContrast)
+                : _flashBad.Get(RemoveGlyphColor(), RowFillFlash(false), PillMinContrast),
+            NoWrap: true, FontSize: 12) { Bold = true, Ellipsize = true },
+        Else: new RowElement(new HudElement[]
+        {
+            new TextElement(() => Item() is { } s ? PiecesText(s) : "", Color: () => MutedColor(), NoWrap: true),
+            Glyph(SwordIcon, () => Item() is { } s && s.HasWeaponSkin() ? MutedColor() : Transparent),
+        }, Gap: 4f)), Width: PiecesCellW);
+
+    private ColorRgba RowFillFlash(bool ok)
+        => Over((ok ? SuccessColor() : DangerColor()) with { A = ok ? ChipWashAlpha : 0.20f }, TileColor());
+
+    // The house remove-hover red (#ff8a8b on the dark presets) derived from the theme's Danger: Danger 35 % toward white.
+    private ColorRgba RemoveGlyphColor() => Mix(DangerColor(), White, 0.35f);
+
+    // Rename: name + pieces become ONE single-line input (same total width). FocusRequest takes keyboard focus the
+    // moment the pencil is clicked; Enter submits (SingleLine: Enter commits and ends editing, never opens chat).
+    // ⚠️ InputElement has a 28 px minimum height, so this row's tile is 30 px while renaming (overlaps the 2 px gap).
+    private HudElement RenameInput(Func<int> Idx) => new InputElement(
+        () => _editBuffer, _ => CommitRename(Idx()), Width: RenameInputW, OnChange: s => _editBuffer = s)
+    {
+        SingleLine = true,
+        FocusRequest = () => _focusSeq,
+    };
+
+    // Wear (Primary 58 × 22) — or the green "Worn" chip when this outfit is what's worn. Recessed while any switch is in
+    // flight (the switching row shows "…"), while renaming / confirming anywhere.
+    private HudElement WearCell(Func<int> Idx, Func<OutfitSlot?> Item) => new CellElement(new ConditionalElement(
+        () => Item() is { } s && ReferenceEquals(s, _wornSlot) && !ReferenceEquals(s, _switchingSlot) && !IsEditing(Idx()),
+        Then: StatusRowChip(() => _loc.T("wardrobe.window.worn"), SuccessColor, WearW),
+        Else: PrimaryRowPill(
+            () => Item() is { } s && ReferenceEquals(s, _switchingSlot) ? "…" : _loc.T("wardrobe.window.wear"),
+            () => OnWearRow(Idx()), WearW, () => CanWear(Idx()),
+            over => { SetHint(HintWear, over); OnRowHover(Idx(), over); })), Width: WearW);
+
+    // ── icon buttons ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Paused (another row is renaming / confirming): a dim glyph, no hover, no click.
+    private ColorRgba PausedGlyph() => TextColor() with { A = 0.32f };
+
+    // Pencil → ✓ while this row is renaming (same 24 px cell).
+    private HudElement RenameButton(Func<int> Idx, Func<OutfitSlot?> Item)
+    {
+        var hover = new RowHover();
+        return IconButton(() => IsEditing(Idx()) ? CheckIcon.Pick(_uiScale) : PencilIcon.Pick(_uiScale), PencilIcon.Units,
+            Item, hover,
+            tint: () => IsEditing(Idx()) || !Busy ? TextColor() : PausedGlyph(),
+            wash: IconHoverWash,
+            enabled: () => Item() != null && (IsEditing(Idx()) || !Busy),
+            onClick: () => { if (IsEditing(Idx())) CommitRename(Idx()); else EnterEdit(Idx()); },
+            onHover: over => { SetHint(IsEditing(Idx()) ? HintSaveName : HintRename, over, HintSaveName, HintRename);
+                               OnRowHover(Idx(), over); });
+    }
+
+    // Update to what's worn now (arms the Replace confirm). Hidden (transparent, inert) on the row being renamed.
+    private HudElement UpdateButton(Func<int> Idx, Func<OutfitSlot?> Item)
+    {
+        var hover = new RowHover();
+        return IconButton(() => RefreshIcon.Pick(_uiScale), RefreshIcon.Units, Item, hover,
+            tint: () => IsEditing(Idx()) ? Transparent : Busy ? PausedGlyph() : TextColor(),
+            wash: IconHoverWash,
+            enabled: () => Item() != null && !Busy,
+            onClick: () =>
+            {
+                ArmConfirm(Idx(), ConfirmUpdate);
+                if (IsConfirming(Idx())) _confirmText = _loc.T("wardrobe.confirm.replace");
+            },
+            onHover: over => { SetHint(HintUpdate, over); OnRowHover(Idx(), over); });
+    }
+
+    // ✕ = delete (arms the Delete confirm; red wash + red glyph on hover), or "cancel" on the row being renamed.
+    private HudElement DeleteButton(Func<int> Idx, Func<OutfitSlot?> Item)
+    {
+        var hover = new RowHover();
+        return IconButton(() => CloseIcon.Pick(_uiScale), CloseIcon.Units, Item, hover,
+            tint: () => IsEditing(Idx()) ? (hover.Get(Item()) ? TextColor() : MutedColor())
+                      : Busy ? PausedGlyph()
+                      : hover.Get(Item()) ? _removeGlyph.Get(RemoveGlyphColor(), RemoveHoverWash(), 3f) : MutedColor(),
+            wash: () => IsEditing(Idx()) ? IconHoverWash() : RemoveHoverWash(),
+            enabled: () => Item() != null && (IsEditing(Idx()) || !Busy),
+            onClick: () =>
+            {
+                if (IsEditing(Idx())) { CancelEdits(); return; }
+                ArmConfirm(Idx(), ConfirmDelete);
+                if (IsConfirming(Idx()) && Item() is { } s) _confirmText = _loc.TFormat("wardrobe.confirm.delete", s.Name);
+            },
+            onHover: over => { SetHint(IsEditing(Idx()) ? HintCancel : HintDelete, over, HintCancel, HintDelete);
+                               OnRowHover(Idx(), over); });
     }
 }

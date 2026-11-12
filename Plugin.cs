@@ -72,7 +72,11 @@ public sealed partial class Plugin : IStellarPlugin
                 new HotkeyAction(
                     Id: $"wardrobe.apply.{n}",
                     Description: _loc.TFormat("wardrobe.hotkey.apply", n),
-                    SuggestedDefault: null),
+                    SuggestedDefault: null)
+                {
+                    // Dormant outside the world (title / character select): the key then reaches the game untouched.
+                    IsActive = () => _services.ClientState.Phase == GamePhase.World,
+                },
                 callback: () => OnApply(n));
         }
 
@@ -80,7 +84,10 @@ public sealed partial class Plugin : IStellarPlugin
             new HotkeyAction(
                 Id: "wardrobe.window.toggle",
                 Description: _loc.T("wardrobe.hotkey.windowToggle"),
-                SuggestedDefault: null),
+                SuggestedDefault: null)
+            {
+                IsActive = () => _services.ClientState.Phase == GamePhase.World,
+            },
             callback: ToggleOverlay);
 
         InitOverlay();
@@ -102,18 +109,32 @@ public sealed partial class Plugin : IStellarPlugin
     // A stable per-character key: the game's char id. Null until it resolves (title / character select /
     // just after logout) — every store op is a no-op under a null key (never write outfits under an
     // unknown character; the old name/"default" fallback is gone — it collided across accounts).
-    private string? CharacterKey => _services.PlayerState.CharId != 0 ? _services.PlayerState.CharId.ToString() : null;
+    // The key string is cached per char id: the window's row Funcs read it many times per refresh, and a fresh
+    // ToString() each time was a per-poll allocation (Plugin-Performance-Rules §2).
+    private string? CharacterKey
+    {
+        get
+        {
+            var id = _services.PlayerState.CharId;
+            if (id == 0) return null;
+            if (id != _charKeyId || _charKey is null) { _charKeyId = id; _charKey = id.ToString(); }
+            return _charKey;
+        }
+    }
+
+    private long _charKeyId;
+    private string? _charKey;
 
     // Char ids whose one-time name→char-id migration has already been attempted this session (see
     // TryMigrateNameToCharId). Per-CHARACTER, not per-session: a character with nothing to migrate must
     // never block a LATER character that DOES have name-keyed outfits — the earlier per-session bool let
-    // a first-seen character (e.g. Rawita, no outfits) latch it so Revette never migrated. Ticked from
-    // the framework Update hook.
+    // a first-seen character with no outfits latch it so the next character never migrated. Ticked from
+    // the overlay's 10 Hz IFramework.Every tick (Plugin.Overlay.cs) — there is no char-changed event.
     private readonly HashSet<string> _migratedChars = new();
 
     // Runs once PER CHARACTER, the first time that character's id resolves: copies any outfits still
     // sitting under the legacy name key (or "default") onto the char-id key, keeping the legacy key for
-    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every frame — short-circuits on the
+    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every tick — short-circuits on the
     // per-char set, and the store's own idempotency means a re-attempt can never duplicate an
     // already-migrated char-id entry.
     private void TryMigrateNameToCharId()
@@ -175,6 +196,8 @@ public sealed partial class Plugin : IStellarPlugin
         }
 
         DiagApplying(slot);
+        _switchingSlot = slot;   // header "Switching to …" + every Wear pill recessed until EndSwitch
+        Repaint();
         _ = ApplyAndReportAsync(slot);
     }
 
@@ -201,6 +224,8 @@ public sealed partial class Plugin : IStellarPlugin
         finally
         {
             Interlocked.Exchange(ref _inFlight, 0);
+            // The await resumes off the main thread (ConfigureAwait(false)); window state changes hop back first.
+            _services.Framework.Post(EndSwitch);
         }
     }
 
@@ -223,8 +248,9 @@ public sealed partial class Plugin : IStellarPlugin
         else if (result is WardrobeResult.Rejected or WardrobeResult.InCombat or WardrobeResult.Timeout)
         {
             // The game toasts the specific reason (combat lock, etc.) itself; this is the plugin's
-            // own coarse failure note so a no-op click isn't silent.
+            // own coarse failure note so a no-op click isn't silent — plus the row flash + footer (main thread).
             Toast(NoticeTipType.RedBar, _loc.TFormat("wardrobe.toast.applyFailed", slot.Name));
+            _services.Framework.Post(() => OnApplyFailed(slot));
         }
     }
 
