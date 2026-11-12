@@ -13,6 +13,11 @@ namespace Stellar.WardrobeLoadout;
 /// </summary>
 public sealed partial class Plugin
 {
+    // ALWAYS-ON (not diagnostics-gated): one short line per change to the saved outfits — save, delete, rename,
+    // replace, move. Without it an outfit that "disappeared" in game left no trace of how. Only user actions reach
+    // here (never a per-frame path), so the log stays quiet in normal play.
+    private void LogChange(string what) => _services.Log.Info($"[WardrobeLoadout] {what}");
+
     private void DiagApplying(OutfitSlot slot)
     {
         if (!StellarDiagnostics.IsEnabled) return;

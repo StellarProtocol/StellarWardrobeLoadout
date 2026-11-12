@@ -300,6 +300,8 @@ public sealed partial class Plugin : IStellarPlugin
         captured.Name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
         _store.Add(key, captured);
         Persist();
+        var count = _store.Get(key).Count;
+        LogChange($"saved '{captured.Name}' as slot {count} ({count} outfits) for {key}");
         DiagSaved(captured, key);
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", captured.Name));
         return true;
@@ -376,8 +378,29 @@ public sealed partial class Plugin : IStellarPlugin
         }
     }
 
+    // Runs only on user actions (save / rename / update / delete / move) and the one-time migration — never per frame —
+    // so the extra read for the rolling backup costs nothing that matters.
     private void Persist()
-        => _services.Data.Write(OutfitPersistence.FileName, OutfitPersistence.Serialize(_store.Root));
+    {
+        var next = OutfitPersistence.Serialize(_store.Root);
+        BackupPrevious(next);
+        _services.Data.Write(OutfitPersistence.FileName, next);
+    }
+
+    // Keep the outgoing content as outfits.prev.json (one version only) when this write changes it. Best-effort: a
+    // failed backup must never block the save itself.
+    private void BackupPrevious(byte[] next)
+    {
+        try
+        {
+            var prev = _services.Data.Read(OutfitPersistence.FileName);
+            if (OutfitPersistence.ShouldBackup(prev, next)) _services.Data.Write(OutfitPersistence.PrevFileName, prev!);
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Warning($"[WardrobeLoadout] {OutfitPersistence.PrevFileName} backup failed: {ex.Message}");
+        }
+    }
 
     private void Toast(NoticeTipType type, string content)
         => _services.NoticeTips.Create(type).WithContent(content).Show();

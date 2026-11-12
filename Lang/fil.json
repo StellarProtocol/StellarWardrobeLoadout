@@ -36,7 +36,7 @@
   "wardrobe.preview.weapon": "weapon skin",
   "wardrobe.preview.hidden": "{0} nakatago",
   "wardrobe.preview.hiddenOne": "1 nakatago",
-  "wardrobe.preview.gestures": "I-drag: iikot · Shift+drag: ilipat · Wheel: zoom",
+  "wardrobe.preview.gestures": "I-drag ikot (+Shift lipat) · Wheel zoom",
   "wardrobe.confirm.delete": "Burahin ang “{0}”?",
   "wardrobe.confirm.replace": "Palitan ng suot mo ngayon?",
   "wardrobe.button.delete": "Burahin",

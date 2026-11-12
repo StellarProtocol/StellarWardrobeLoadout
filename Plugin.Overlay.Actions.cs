@@ -105,10 +105,12 @@ public sealed partial class Plugin
         if (!IsEditing(idx)) return;
         var name = _editBuffer?.Trim() ?? "";
         _editingIdx = -1;
+        var oldName = RowAt(idx)?.Name;   // Rename overwrites it in place
         if (RowAt(idx) is { } slot && name.Length > 0 && name != slot.Name
             && ResolveKeyOrSkip("rename") is { } key && _store.Rename(key, idx, name))
         {
             Persist();
+            LogChange($"renamed slot {idx + 1} '{oldName}' -> '{name}' for {key}");
             if (ReferenceEquals(slot, _previewSlot)) RefreshPreviewInfo();
             Feedback(slot, true, _loc.T("wardrobe.flash.renamed"), _loc.TFormat("wardrobe.footer.renamed", slot.Name));
             return;
@@ -163,6 +165,7 @@ public sealed partial class Plugin
         }
         if (ResolveKeyOrSkip("update") is not { } key || !_store.Update(key, idx, captured)) return;
         Persist();
+        LogChange($"replaced slot {idx + 1} '{slot.Name}' with the worn outfit for {key}");
         DiagUpdated(slot, key);   // slot IS the updated entry (Update overwrites in place)
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.updated", slot.Name));
         if (ReferenceEquals(slot, _previewSlot))
@@ -178,6 +181,7 @@ public sealed partial class Plugin
     {
         if (RowAt(idx) is not { } slot || ResolveKeyOrSkip("delete") is not { } key || !_store.Delete(key, idx)) return;
         Persist();
+        LogChange($"deleted '{slot.Name}' from slot {idx + 1} ({_store.Get(key).Count} left) for {key}");
         if (ReferenceEquals(slot, _previewSlot)) HidePreview();
         if (ReferenceEquals(slot, _wornSlot)) _wornSlot = null;
         Feedback(null, true, null, _loc.TFormat("wardrobe.footer.deleted", slot.Name, CountText(Rows.Count)));
@@ -189,7 +193,11 @@ public sealed partial class Plugin
     private void OnReorder(int from, int to)
     {
         if (Busy) { Repaint(); return; }
-        if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, from, to)) Persist();
+        if (ResolveKeyOrSkip("move") is { } key && _store.MoveTo(key, from, to))
+        {
+            Persist();
+            LogChange($"moved '{_store.Get(key)[to].Name}' slot {from + 1} -> {to + 1} for {key}");
+        }
         Repaint();
     }
 }

@@ -36,7 +36,7 @@
   "wardrobe.preview.weapon": "skin senjata",
   "wardrobe.preview.hidden": "{0} disembunyikan",
   "wardrobe.preview.hiddenOne": "1 disembunyikan",
-  "wardrobe.preview.gestures": "Seret: putar · Shift+seret: geser · Roda: zoom",
+  "wardrobe.preview.gestures": "Seret putar (+Shift geser) · Roda zoom",
   "wardrobe.confirm.delete": "Hapus “{0}”?",
   "wardrobe.confirm.replace": "Ganti dengan yang sedang dipakai?",
   "wardrobe.button.delete": "Hapus",

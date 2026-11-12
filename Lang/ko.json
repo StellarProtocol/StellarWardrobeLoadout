@@ -36,7 +36,7 @@
   "wardrobe.preview.weapon": "무기 스킨",
   "wardrobe.preview.hidden": "{0}개 숨김",
   "wardrobe.preview.hiddenOne": "1개 숨김",
-  "wardrobe.preview.gestures": "드래그: 회전 · Shift+드래그: 이동 · 휠: 확대/축소",
+  "wardrobe.preview.gestures": "드래그 회전 (+Shift 이동) · 휠 확대",
   "wardrobe.confirm.delete": "“{0}”을(를) 삭제할까요?",
   "wardrobe.confirm.replace": "지금 입은 의상으로 바꿀까요?",
   "wardrobe.button.delete": "삭제",

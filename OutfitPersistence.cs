@@ -48,6 +48,21 @@ public static class OutfitPersistence
     /// could not parse are never destroyed, only moved aside.</summary>
     public const string CorruptFileName = "outfits.corrupt.json";
 
+    /// <summary>One rolling backup: the PREVIOUS content of <see cref="FileName"/>, rewritten before each save
+    /// that changes it. Lets a user recover an outfit lost to a mis-click (or tell us what the file held before
+    /// it went missing) without keeping a growing history.</summary>
+    public const string PrevFileName = "outfits.prev.json";
+
+    /// <summary>Whether the content about to replace <see cref="FileName"/> should first push the current
+    /// content to <see cref="PrevFileName"/>: only when there IS current content and it differs. A save that
+    /// writes identical bytes must not overwrite the backup with a copy of itself — that would erase the one
+    /// version that differs.</summary>
+    /// <param name="existing">The bytes currently in <see cref="FileName"/>, or null when it is absent.</param>
+    /// <param name="next">The bytes about to be written.</param>
+    /// <returns>True when <paramref name="existing"/> should be copied to <see cref="PrevFileName"/>.</returns>
+    public static bool ShouldBackup(byte[]? existing, byte[] next)
+        => existing is { Length: > 0 } && !existing.AsSpan().SequenceEqual(next);
+
     // Compact (no indent, no newlines) — this is a machine file, and the owner's root is ~55 KB.
     // Relaxed escaping keeps non-ASCII outfit names (JA/TH/ID) readable instead of \uXXXX-expanded.
     private static readonly JsonSerializerOptions Options = new()

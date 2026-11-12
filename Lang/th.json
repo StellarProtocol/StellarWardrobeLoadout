@@ -36,7 +36,7 @@
   "wardrobe.preview.weapon": "สกินอาวุธ",
   "wardrobe.preview.hidden": "ซ่อน {0} ชิ้น",
   "wardrobe.preview.hiddenOne": "ซ่อน 1 ชิ้น",
-  "wardrobe.preview.gestures": "ลาก: หมุน · Shift+ลาก: เลื่อน · ล้อเมาส์: ซูม",
+  "wardrobe.preview.gestures": "ลาก หมุน (+Shift เลื่อน) · ล้อเมาส์ ซูม",
   "wardrobe.confirm.delete": "ลบ “{0}”?",
   "wardrobe.confirm.replace": "แทนที่ด้วยชุดที่สวมอยู่ตอนนี้?",
   "wardrobe.button.delete": "ลบ",

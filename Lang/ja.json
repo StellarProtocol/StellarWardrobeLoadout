@@ -36,7 +36,7 @@
   "wardrobe.preview.weapon": "武器スキン",
   "wardrobe.preview.hidden": "{0}点非表示",
   "wardrobe.preview.hiddenOne": "1点非表示",
-  "wardrobe.preview.gestures": "ドラッグ: 回転 · Shift+ドラッグ: 移動 · ホイール: ズーム",
+  "wardrobe.preview.gestures": "ドラッグ回転 (+Shift移動) · ホイール拡大",
   "wardrobe.confirm.delete": "「{0}」を削除しますか？",
   "wardrobe.confirm.replace": "今着ている衣装で上書きしますか？",
   "wardrobe.button.delete": "削除",
