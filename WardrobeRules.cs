@@ -84,31 +84,36 @@ public static class WardrobeRules
         return n == wornNonZero;
     }
 
-    /// <summary>How many saved outfits <see cref="MatchesWorn"/> the worn outfit. The overlay only reads the game's
-    /// show/hide setting when this is 2 or more — with one candidate (or none) there is nothing to rank.</summary>
+    /// <summary>Whether <see cref="PickWorn"/> needs the game's current show/hide state: some saved outfit matches the
+    /// worn pieces AND carries a saved state to check against it. Otherwise (no piece match, or only older saves with
+    /// <c>Hidden == null</c>) the overlay skips the Lua read entirely.</summary>
     /// <param name="rows">The character's saved outfits, in list order.</param>
     /// <param name="worn">The currently worn region → fashionId map.</param>
     /// <param name="wornNonZero"><see cref="CountNonZero"/> of <paramref name="worn"/>.</param>
-    public static int CountWornCandidates(IReadOnlyList<OutfitSlot> rows, IReadOnlyDictionary<int, int> worn, int wornNonZero)
+    public static bool NeedsHiddenState(IReadOnlyList<OutfitSlot> rows, IReadOnlyDictionary<int, int> worn, int wornNonZero)
     {
-        var n = 0;
         for (var i = 0; i < rows.Count; i++)
-            if (MatchesWorn(rows[i].Regions, worn, wornNonZero)) n++;
-        return n;
+            if (rows[i].Hidden is not null && MatchesWorn(rows[i].Regions, worn, wornNonZero)) return true;
+        return false;
     }
 
-    /// <summary>Which saved outfit is being WORN, when several share the same pieces and differ only in show/hide (user
-    /// report 2026-11-13: "Vampy" and "Naked" — same clothes, Naked hides them — and wearing Naked said Worn = Vampy,
-    /// because the first piece match won). Among the outfits that <see cref="MatchesWorn"/>, the best rank wins:
-    /// <list type="number">
-    /// <item>saved <see cref="OutfitSlot.Hidden"/> equals the CURRENT show/hide state (<see cref="HiddenEquals"/>);</item>
-    /// <item>no saved show/hide state (<c>Hidden == null</c>, older saves) — matches on pieces only;</item>
-    /// <item>a saved state that differs from the current one (still the right clothes, e.g. the player toggled a hat
-    /// by hand since).</item>
+    /// <summary>Which saved outfit is being WORN, or null. Origin: user report 2026-11-13, "Vampy" and "Naked" hold the
+    /// same pieces (Naked hides them), and wearing Naked said Worn = Vampy because the first piece match won. Owner rule
+    /// for "wears a slot, then changes things in game":
+    /// <list type="bullet">
+    /// <item>pieces changed so no outfit <see cref="MatchesWorn"/> → null (no Worn anywhere);</item>
+    /// <item>pieces match but the CURRENT show/hide differs from the outfit's saved <see cref="OutfitSlot.Hidden"/> →
+    /// that outfit is NOT worn (a modified look); if every piece match has a saved state and none equals the current
+    /// one → null;</item>
+    /// <item>an exact show/hide match (<see cref="HiddenEquals"/>) beats an outfit saved without a state
+    /// (<c>Hidden == null</c>, older saves) — those can't be checked, so they count as worn on pieces alone, but only
+    /// when no candidate matches exactly;</item>
+    /// <item><paramref name="currentHidden"/> null (setting unreadable) → every piece match is eligible: a read failure
+    /// must not blank Worn.</item>
     /// </list>
-    /// When <paramref name="currentHidden"/> is null (setting unreadable) every candidate ranks the same. A tie goes to
-    /// <paramref name="lastApplied"/> (the outfit this plugin last put on, by object identity), then to list order.
-    /// Allocation-free.</summary>
+    /// Ties go to <paramref name="lastApplied"/> (the outfit this plugin last put on, by object identity), then to list
+    /// order. Dyes and the weapon skin are deliberately NOT compared — Worn is about which clothes are on and which are
+    /// shown; a re-dye or weapon-skin swap keeps the outfit marked. Allocation-free.</summary>
     /// <param name="rows">The character's saved outfits, in list order.</param>
     /// <param name="worn">The currently worn region → fashionId map.</param>
     /// <param name="wornNonZero"><see cref="CountNonZero"/> of <paramref name="worn"/>.</param>
@@ -126,7 +131,8 @@ public static class WardrobeRules
             if (!MatchesWorn(slot.Regions, worn, wornNonZero)) continue;
             int rank = currentHidden is null ? 0
                      : slot.Hidden is null ? 1
-                     : HiddenEquals(slot.Hidden, currentHidden) ? 2 : 0;
+                     : HiddenEquals(slot.Hidden, currentHidden) ? 2 : -1;
+            if (rank < 0) continue;   // pieces match but show/hide was changed since → a modified look, not this outfit
             bool isLast = ReferenceEquals(slot, lastApplied);
             // Strictly better rank wins; at equal rank only the last-applied outfit displaces an earlier one, so
             // otherwise the first in list order stays.

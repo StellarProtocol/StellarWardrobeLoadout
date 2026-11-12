@@ -10,7 +10,8 @@ namespace Stellar.WardrobeLoadout;
 /// outfit and writes it back after the outfit is worn (Knowledge Base <c>Fashion-Show-Hide-State.md</c>).
 /// <para>Both directions go through the framework <c>ILua</c> on the main thread. The WRITE runs only on a user action
 /// (wear, hotkey), so its chunk is built per call; the READ also runs on save / replace AND is polled at ~1 Hz while the
-/// window is shown and the Worn pick is ambiguous, so it is a <c>_G</c> function compiled once (Plugin-Performance-Rules §4).
+/// window is shown and a worn-matching outfit has a state to check, so it is a <c>_G</c> function compiled once
+/// (Plugin-Performance-Rules §4).
 /// The READ parks the raw STRING in a global (string readback is the reliable ILua path; a Lua table would not read
 /// back) and the pure-C# <see cref="WardrobeRules.ParseHidden"/> decodes it. The WRITE uses the LIVE client's model
 /// (validated in game 2026-11-13 — the decompiled <c>SetFashionRegionIsHide</c> does not exist live, "attempt to call
@@ -56,9 +57,9 @@ public sealed partial class Plugin
     }
 
     // ── current show/hide, cached for the Worn ranking (WardrobeRules.PickWorn) ────────────────────────────────────
-    // Read at most once per HideReadSec, only while the window is shown AND two or more saved outfits share the worn
-    // pieces (RefreshWorn decides); the parse runs only when the raw string changed. After this plugin applies an
-    // outfit with a saved state, the cache is seeded with that state and reads pause for HideSettleSec: the server copy
+    // Read at most once per HideReadSec, only while the window is shown AND a saved outfit with the worn pieces has a
+    // saved state to check (RefreshWorn decides); the parse runs only when the raw string changed. After this plugin
+    // applies an outfit with a saved state, the cache is seeded with that state and reads pause for HideSettleSec: the server copy
     // in settingMap[201] lags the client by ~3 s (Fashion-Show-Hide-State.md), so an immediate read would be stale.
     private const float HideReadSec = 1f;
     private const float HideSettleSec = 5f;

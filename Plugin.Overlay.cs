@@ -242,9 +242,9 @@ public sealed partial class Plugin
 
     // Which saved outfit is being worn (WardrobeRules.MatchesWorn: same non-zero pieces). One GetWornOutfit read per
     // check, the worn side counted once, the saved maps walked allocation-free; repaint only when the match changes.
-    // Several outfits can share the pieces and differ only in show/hide ("Vampy" vs "Naked"): only then is the game's
-    // show/hide setting consulted (cached, ≤1 Hz) and WardrobeRules.PickWorn ranks them — saved state equal to the
-    // current one, then no saved state, then the outfit this plugin last applied, then list order.
+    // Show/hide counts too (WardrobeRules.PickWorn): an outfit whose saved state differs from the current one is a
+    // modified look, not Worn; an exact match beats an outfit saved without a state; ties → last applied, list order.
+    // The game's setting is read (cached, ≤1 Hz) only when a piece-matching outfit has a saved state to check.
     private void RefreshWorn()
     {
         _nextWornCheck = _services.Framework.TimeNow + WornCheckSec;
@@ -253,7 +253,7 @@ public sealed partial class Plugin
         if (rows.Count > 0 && _services.Wardrobe.IsAvailable && _services.Wardrobe.GetWornOutfit() is { } worn)
         {
             int nonZero = WardrobeRules.CountNonZero(worn);
-            var current = WardrobeRules.CountWornCandidates(rows, worn, nonZero) > 1 ? CurrentHiddenState() : null;
+            var current = WardrobeRules.NeedsHiddenState(rows, worn, nonZero) ? CurrentHiddenState() : null;
             match = WardrobeRules.PickWorn(rows, worn, nonZero, current, _lastApplied);
         }
         if (ReferenceEquals(match, _wornSlot)) return;

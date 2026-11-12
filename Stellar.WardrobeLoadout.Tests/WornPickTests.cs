@@ -64,8 +64,67 @@ public sealed class WornPickTests
         var rows = new List<OutfitSlot> { legacy, naked };
 
         Assert.Same(naked, Pick(rows, NakedHidden()));
-        // No exact match → the stateless outfit beats a saved state that differs from the current one.
+        // No exact match → the stateless outfit (can't be checked) is Worn; Naked's differing state rules it out.
         Assert.Same(legacy, Pick(rows, AllShown()));
+    }
+
+    [Fact]
+    public void Null_hidden_is_still_worn_on_pieces_alone()
+    {
+        var legacy = Slot("Legacy", null);
+        var rows = new List<OutfitSlot> { legacy };
+
+        Assert.Same(legacy, Pick(rows, NakedHidden()));
+        Assert.Same(legacy, Pick(rows, AllShown()));
+        Assert.Same(legacy, Pick(rows, current: null));
+        Assert.False(WardrobeRules.NeedsHiddenState(rows, Pieces, WardrobeRules.CountNonZero(Pieces)));
+    }
+
+    // Owner rule: wear a slot, then change show/hide in game → that slot is a modified look, not Worn.
+    [Fact]
+    public void Pieces_match_but_show_hide_changed_means_no_worn()
+    {
+        var naked = Slot("Naked", NakedHidden());
+        var rows = new List<OutfitSlot> { naked };
+
+        Assert.Null(Pick(rows, AllShown(), lastApplied: naked));
+        var changed = NakedHidden();
+        changed[713] = false;   // the hat shown again by hand
+        Assert.Null(Pick(rows, changed, lastApplied: naked));
+        Assert.True(WardrobeRules.NeedsHiddenState(rows, Pieces, WardrobeRules.CountNonZero(Pieces)));
+    }
+
+    [Fact]
+    public void Every_candidate_has_a_differing_saved_state_means_no_worn()
+    {
+        var vampy = Slot("Vampy", AllShown());
+        var naked = Slot("Naked", NakedHidden());
+        var half = AllShown();
+        half[713] = true;   // only the hat hidden — neither saved state
+
+        Assert.Null(Pick(new List<OutfitSlot> { vampy, naked }, half, lastApplied: naked));
+    }
+
+    [Fact]
+    public void Pieces_changed_so_nothing_matches_means_no_worn()
+    {
+        var naked = Slot("Naked", NakedHidden(), new Dictionary<int, int> { [701] = 1, [713] = 77, [717] = 99 });
+        var rows = new List<OutfitSlot> { naked };
+
+        Assert.Null(Pick(rows, NakedHidden(), lastApplied: naked));
+        Assert.Null(Pick(rows, current: null, lastApplied: naked));
+    }
+
+    // Worn is about which clothes are on and shown: a re-dye or another weapon skin keeps the outfit marked.
+    [Fact]
+    public void Dyes_and_weapon_skin_are_not_compared()
+    {
+        var naked = Slot("Naked", NakedHidden());
+        naked.WeaponProfessionId = 9;
+        naked.WeaponSkinId = 4021;
+        naked.DyeAreas[701] = new Dictionary<int, float[]> { [1] = new[] { 1f, 0f, 0f } };
+
+        Assert.Same(naked, Pick(new List<OutfitSlot> { naked }, NakedHidden()));
     }
 
     [Fact]
@@ -77,8 +136,10 @@ public sealed class WornPickTests
 
         Assert.Same(a, Pick(rows, NakedHidden()));
         Assert.Same(b, Pick(rows, NakedHidden(), lastApplied: b));
-        // Neither matches the current state (a hat toggled by hand since) → still the last applied one.
-        Assert.Same(b, Pick(rows, AllShown(), lastApplied: b));
+        // Stateless outfits tie too.
+        var c = Slot("C", null);
+        var d = Slot("D", null);
+        Assert.Same(d, Pick(new List<OutfitSlot> { c, d }, AllShown(), lastApplied: d));
     }
 
     [Fact]
@@ -109,8 +170,9 @@ public sealed class WornPickTests
         var vampy = Slot("Vampy", AllShown());
         var rows = new List<OutfitSlot> { other, vampy };
 
-        Assert.Same(vampy, Pick(rows, NakedHidden(), lastApplied: other));
+        Assert.Same(vampy, Pick(rows, AllShown(), lastApplied: other));
         Assert.Null(Pick(new List<OutfitSlot> { other }, NakedHidden()));
-        Assert.Equal(1, WardrobeRules.CountWornCandidates(rows, Pieces, WardrobeRules.CountNonZero(Pieces)));
+        Assert.False(WardrobeRules.NeedsHiddenState(new List<OutfitSlot> { other }, Pieces,
+            WardrobeRules.CountNonZero(Pieces)));
     }
 }
