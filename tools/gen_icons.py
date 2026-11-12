@@ -19,7 +19,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Icons")
 SCALES = [0.75, 1.0, 1.25, 1.5, 2.0]
 
 # name -> glyph size in canvas units (what the window draws). Keep in sync with Plugin.Style.Icons.cs.
-UNITS = {"hanger": 24, "pencil": 16, "refresh": 16, "check": 16, "close": 14, "sword": 12}
+UNITS = {"hanger": 24, "pencil": 16, "refresh": 16, "check": 16, "close": 14}
 GRIP_UNITS = (6, 14)   # w x h
 
 
@@ -105,16 +105,6 @@ def close(n):
     return p.done()
 
 
-def sword(n):
-    # Simplified from the mockup's blade outline, which turned to mush at 9-12 px: a diagonal blade, a cross
-    # guard and a short grip, each one stroke.
-    p = Pen(n)
-    p.line((20, 4), (9, 15))                # blade
-    p.line((5.5, 12.5), (11.5, 18.5))       # guard
-    p.line((8, 16), (4, 20))                # grip
-    return p.done()
-
-
 def grip(w, h):
     """Six square dots (2 columns x 3 rows), whole-pixel squares, no anti-aliasing at all."""
     d = max(1, int(round(h / 7.0)))
@@ -130,7 +120,7 @@ def grip(w, h):
     return img
 
 
-DRAW = {"hanger": hanger, "pencil": pencil, "refresh": refresh, "check": check, "close": close, "sword": sword}
+DRAW = {"hanger": hanger, "pencil": pencil, "refresh": refresh, "check": check, "close": close}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

@@ -6,7 +6,7 @@ namespace Stellar.WardrobeLoadout;
 
 /// <summary>
 /// Overlay partial: the pooled OUTFITS rows (approved prototype). One row = a 26 px raised tile, 2 px apart:
-/// <c>grip · badge · name · "N pcs" (+ sword mark) · Wear · rename · update · ✕</c>. States swap whole parts of the row
+/// <c>grip · badge · name · "N pcs" · Wear · rename · update · ✕</c>. States swap whole parts of the row
 /// (rename → one input; delete / update confirm → a question + two small pills) so nothing else moves.
 /// </summary>
 public sealed partial class Plugin
@@ -142,19 +142,17 @@ public sealed partial class Plugin
 
     private ColorRgba BadgeFill() => Over(AccentColor() with { A = ChipWashAlpha }, TileColor());
 
-    // "9 pcs" + the sword mark when the outfit carries a weapon skin (transparent otherwise, so nothing moves); during a
-    // flash the cell shows the bold "Saved" / "Not now" instead (bold can't toggle live → two complete variants).
+    // "9 pcs"; during a flash the cell shows the bold "Saved" / "Not now" instead (bold can't toggle live → two complete
+    // variants). No weapon-skin mark here: the small sword read as a ✓ tick in game (owner choice A, 2026-11-13) — the
+    // preview line under the model still says "· weapon skin".
     private HudElement PiecesCell(Func<OutfitSlot?> Item) => new CellElement(new ConditionalElement(
         () => Flashing(Item()),
         Then: new TextElement(() => _flashText, Color: () => _flashOk
                 ? _flashGood.Get(SuccessColor(), RowFillFlash(true), PillMinContrast)
                 : _flashBad.Get(RemoveGlyphColor(), RowFillFlash(false), PillMinContrast),
             NoWrap: true, FontSize: 12) { Bold = true, Ellipsize = true },
-        Else: new RowElement(new HudElement[]
-        {
-            new TextElement(() => Item() is { } s ? PiecesText(s) : "", Color: () => MutedColor(), NoWrap: true),
-            Glyph(SwordIcon, () => Item() is { } s && s.HasWeaponSkin() ? MutedColor() : Transparent),
-        }, Gap: 4f)), Width: PiecesCellW);
+        Else: new TextElement(() => Item() is { } s ? PiecesText(s) : "", Color: () => MutedColor(), NoWrap: true)),
+        Width: PiecesCellW);
 
     private ColorRgba RowFillFlash(bool ok)
         => Over((ok ? SuccessColor() : DangerColor()) with { A = ok ? ChipWashAlpha : 0.20f }, TileColor());

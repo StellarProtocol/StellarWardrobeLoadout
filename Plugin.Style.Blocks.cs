@@ -54,7 +54,6 @@ public sealed partial class Plugin
     private static readonly IconSet RefreshIcon = new("refresh", 16, 12, 16, 20, 24, 32);
     private static readonly IconSet CheckIcon   = new("check", 16, 12, 16, 20, 24, 32);
     private static readonly IconSet CloseIcon   = new("close", 14, 10, 14, 16, 18, 21, 28, 32);
-    private static readonly IconSet SwordIcon   = new("sword", 12, 9, 12, 15, 16, 18, 24, 32);
     private static readonly IconSet GripIcon    = new("grip", 14, 10, 14, 16, 18, 21, 28, 32);   // 6 × 14 units
     private const int GripW = 6;
 

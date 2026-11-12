@@ -32,7 +32,7 @@
     <EmbeddedResource Include="Lang/ko.json"  LogicalName="Stellar.WardrobeLoadout.Lang.ko.json" />
     <!-- Launcher tile icon (clothes hanger) — white+alpha, tinted by the launcher. -->
     <EmbeddedResource Include="wardrobe-icon.png" LogicalName="Stellar.WardrobeLoadout.wardrobe-icon.png" />
-    <!-- Window glyphs (hanger, pencil, refresh, check, close, sword, grip): white flat PNGs, one pre-drawn bitmap per
+    <!-- Window glyphs (hanger, pencil, refresh, check, close, grip): white flat PNGs, one pre-drawn bitmap per
          on-screen size (tools/gen_icons.py → Icons/<name>-<px>.png), tinted with theme colours at draw time. -->
     <EmbeddedResource Include="Icons/*.png" LogicalName="Stellar.WardrobeLoadout.Icons.%(Filename).png" />
   </ItemGroup>
