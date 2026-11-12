@@ -247,6 +247,8 @@ public sealed partial class Plugin : IStellarPlugin
             $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote}; show/hide -> {HiddenNote(slot, result == WardrobeResult.Success)})");
         if (result == WardrobeResult.Success)
         {
+            // Worn tie-break + show/hide cache (main thread; posted after SendHiddenState, so it runs after the write).
+            _services.Framework.Post(() => OnApplySucceeded(slot));
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.applied", slot.Name));
             if (weapon is { } wr && wr != WardrobeResult.Success)
             {

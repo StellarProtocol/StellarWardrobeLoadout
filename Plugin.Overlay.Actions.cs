@@ -199,6 +199,8 @@ public sealed partial class Plugin
         LogChange($"deleted '{slot.Name}' from slot {idx + 1} ({_store.Get(key).Count} left) for {key}");
         if (ReferenceEquals(slot, _previewSlot)) HidePreview();
         if (ReferenceEquals(slot, _wornSlot)) _wornSlot = null;
+        if (ReferenceEquals(slot, _lastApplied)) _lastApplied = null;
+        _nextWornCheck = 0f;   // another outfit with the same pieces may now be the worn one
         Feedback(null, true, null, _loc.TFormat("wardrobe.footer.deleted", slot.Name, CountText(Rows.Count)));
     }
 

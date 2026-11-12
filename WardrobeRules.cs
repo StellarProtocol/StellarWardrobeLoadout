@@ -84,6 +84,77 @@ public static class WardrobeRules
         return n == wornNonZero;
     }
 
+    /// <summary>How many saved outfits <see cref="MatchesWorn"/> the worn outfit. The overlay only reads the game's
+    /// show/hide setting when this is 2 or more — with one candidate (or none) there is nothing to rank.</summary>
+    /// <param name="rows">The character's saved outfits, in list order.</param>
+    /// <param name="worn">The currently worn region → fashionId map.</param>
+    /// <param name="wornNonZero"><see cref="CountNonZero"/> of <paramref name="worn"/>.</param>
+    public static int CountWornCandidates(IReadOnlyList<OutfitSlot> rows, IReadOnlyDictionary<int, int> worn, int wornNonZero)
+    {
+        var n = 0;
+        for (var i = 0; i < rows.Count; i++)
+            if (MatchesWorn(rows[i].Regions, worn, wornNonZero)) n++;
+        return n;
+    }
+
+    /// <summary>Which saved outfit is being WORN, when several share the same pieces and differ only in show/hide (user
+    /// report 2026-11-13: "Vampy" and "Naked" — same clothes, Naked hides them — and wearing Naked said Worn = Vampy,
+    /// because the first piece match won). Among the outfits that <see cref="MatchesWorn"/>, the best rank wins:
+    /// <list type="number">
+    /// <item>saved <see cref="OutfitSlot.Hidden"/> equals the CURRENT show/hide state (<see cref="HiddenEquals"/>);</item>
+    /// <item>no saved show/hide state (<c>Hidden == null</c>, older saves) — matches on pieces only;</item>
+    /// <item>a saved state that differs from the current one (still the right clothes, e.g. the player toggled a hat
+    /// by hand since).</item>
+    /// </list>
+    /// When <paramref name="currentHidden"/> is null (setting unreadable) every candidate ranks the same. A tie goes to
+    /// <paramref name="lastApplied"/> (the outfit this plugin last put on, by object identity), then to list order.
+    /// Allocation-free.</summary>
+    /// <param name="rows">The character's saved outfits, in list order.</param>
+    /// <param name="worn">The currently worn region → fashionId map.</param>
+    /// <param name="wornNonZero"><see cref="CountNonZero"/> of <paramref name="worn"/>.</param>
+    /// <param name="currentHidden">The game's current region → hidden state, or null when it could not be read.</param>
+    /// <param name="lastApplied">The outfit the plugin last applied successfully, or null.</param>
+    public static OutfitSlot? PickWorn(IReadOnlyList<OutfitSlot> rows, IReadOnlyDictionary<int, int> worn, int wornNonZero,
+        IReadOnlyDictionary<int, bool>? currentHidden, OutfitSlot? lastApplied)
+    {
+        OutfitSlot? best = null;
+        int bestRank = -1;
+        bool bestIsLast = false;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var slot = rows[i];
+            if (!MatchesWorn(slot.Regions, worn, wornNonZero)) continue;
+            int rank = currentHidden is null ? 0
+                     : slot.Hidden is null ? 1
+                     : HiddenEquals(slot.Hidden, currentHidden) ? 2 : 0;
+            bool isLast = ReferenceEquals(slot, lastApplied);
+            // Strictly better rank wins; at equal rank only the last-applied outfit displaces an earlier one, so
+            // otherwise the first in list order stays.
+            if (rank > bestRank || (rank == bestRank && isLast && !bestIsLast))
+            {
+                best = slot;
+                bestRank = rank;
+                bestIsLast = isLast;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Whether two show/hide states are the same over the 14 <see cref="HideableRegions"/> (a region missing
+    /// from either map = shown, exactly as the game reads its setting string). Anything else in the maps is ignored.</summary>
+    /// <param name="a">One region → hidden map.</param>
+    /// <param name="b">The other.</param>
+    public static bool HiddenEquals(IReadOnlyDictionary<int, bool> a, IReadOnlyDictionary<int, bool> b)
+    {
+        foreach (var region in HideableRegions)
+        {
+            bool ha = a.TryGetValue(region, out var x) && x;
+            bool hb = b.TryGetValue(region, out var y) && y;
+            if (ha != hb) return false;
+        }
+        return true;
+    }
+
     /// <summary>Whether an outfit's saved show/hide state should be written after the outfit switch resolved. Same
     /// gate as the weapon skin: only after a SUCCESSFUL switch (a refused switch leaves the player's look — pieces AND
     /// visibility — exactly as it was), and only when the outfit carries a state (null = saved before the feature or

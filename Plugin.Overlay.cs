@@ -102,6 +102,10 @@ public sealed partial class Plugin
     private float _nextWornCheck;
     private const float WornCheckSec = 0.5f;
 
+    // The outfit this plugin last applied successfully — the Worn tie-break among outfits with the same pieces. Held by
+    // object identity, so it survives a reorder; cleared when that outfit is deleted and on logout.
+    private OutfitSlot? _lastApplied;
+
     // The outfit an apply is in flight for (header "Switching to …", all Wear pills recessed). Set on the main thread
     // when the switch starts, cleared via IFramework.Post when it resolves (the apply completes off the main thread).
     private OutfitSlot? _switchingSlot;
@@ -199,6 +203,10 @@ public sealed partial class Plugin
             OnWindowHidden();
             _switchingSlot = null;
             _wornSlot = null;
+            _lastApplied = null;
+            _hideRaw = null;
+            _hideCurrent = null;
+            _nextHideRead = 0f;
         }
         catch { /* never throw from an event */ }
     }
@@ -234,6 +242,9 @@ public sealed partial class Plugin
 
     // Which saved outfit is being worn (WardrobeRules.MatchesWorn: same non-zero pieces). One GetWornOutfit read per
     // check, the worn side counted once, the saved maps walked allocation-free; repaint only when the match changes.
+    // Several outfits can share the pieces and differ only in show/hide ("Vampy" vs "Naked"): only then is the game's
+    // show/hide setting consulted (cached, ≤1 Hz) and WardrobeRules.PickWorn ranks them — saved state equal to the
+    // current one, then no saved state, then the outfit this plugin last applied, then list order.
     private void RefreshWorn()
     {
         _nextWornCheck = _services.Framework.TimeNow + WornCheckSec;
@@ -242,8 +253,8 @@ public sealed partial class Plugin
         if (rows.Count > 0 && _services.Wardrobe.IsAvailable && _services.Wardrobe.GetWornOutfit() is { } worn)
         {
             int nonZero = WardrobeRules.CountNonZero(worn);
-            for (int i = 0; i < rows.Count && match is null; i++)
-                if (WardrobeRules.MatchesWorn(rows[i].Regions, worn, nonZero)) match = rows[i];
+            var current = WardrobeRules.CountWornCandidates(rows, worn, nonZero) > 1 ? CurrentHiddenState() : null;
+            match = WardrobeRules.PickWorn(rows, worn, nonZero, current, _lastApplied);
         }
         if (ReferenceEquals(match, _wornSlot)) return;
         _wornSlot = match;
