@@ -170,15 +170,20 @@ public sealed partial class Plugin
         FocusRequest = () => _focusSeq,
     };
 
-    // Wear (Primary 58 × 22) — or the green "Worn" chip when this outfit is what's worn. Recessed while any switch is in
-    // flight (the switching row shows "…"), while renaming / confirming anywhere.
+    // Wear (Primary 58 × 22) — or the green "Worn" pill when this outfit is what's worn. Worn is PRESSABLE and does
+    // exactly what Wear does (owner 2026-11-13): the Worn rule doesn't track dyes / weapon skin / every toggle, so a
+    // drifted look re-applies from the same slot. Both recessed while any switch is in flight (the switching row shows
+    // "…"), while renaming / confirming anywhere. The two swap under a still cursor (a successful Wear turns into Worn),
+    // so each hover clears either hint on leave.
     private HudElement WearCell(Func<int> Idx, Func<OutfitSlot?> Item) => new CellElement(new ConditionalElement(
         () => Item() is { } s && ReferenceEquals(s, _wornSlot) && !ReferenceEquals(s, _switchingSlot) && !IsEditing(Idx()),
-        Then: StatusRowChip(() => _loc.T("wardrobe.window.worn"), SuccessColor, WearW),
+        Then: SuccessRowPill(() => _loc.T("wardrobe.window.worn"),
+            () => OnWearRow(Idx()), WearW, () => CanWear(Idx()),
+            over => { SetHint(HintWearAgain, over, HintWear, HintWearAgain); OnRowHover(Idx(), over); }),
         Else: PrimaryRowPill(
             () => Item() is { } s && ReferenceEquals(s, _switchingSlot) ? "…" : _loc.T("wardrobe.window.wear"),
             () => OnWearRow(Idx()), WearW, () => CanWear(Idx()),
-            over => { SetHint(HintWear, over); OnRowHover(Idx(), over); })), Width: WearW);
+            over => { SetHint(HintWear, over, HintWear, HintWearAgain); OnRowHover(Idx(), over); })), Width: WearW);
 
     // ── icon buttons ──────────────────────────────────────────────────────────────────────────────────────────────
     // Paused (another row is renaming / confirming): a dim glyph, no hover, no click.

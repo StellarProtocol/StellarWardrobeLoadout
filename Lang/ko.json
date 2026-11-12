@@ -26,6 +26,7 @@
   "wardrobe.panel.preview": "미리보기",
   "wardrobe.hint.list": "마우스를 올려 미리보기 · 드래그로 순서 변경",
   "wardrobe.hint.wear": "착용",
+  "wardrobe.hint.wearAgain": "다시 착용",
   "wardrobe.hint.rename": "이름 변경",
   "wardrobe.hint.update": "지금 입은 의상으로 업데이트",
   "wardrobe.hint.delete": "삭제",

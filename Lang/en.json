@@ -26,6 +26,7 @@
   "wardrobe.panel.preview": "Preview",
   "wardrobe.hint.list": "hover to preview · drag to reorder",
   "wardrobe.hint.wear": "Wear",
+  "wardrobe.hint.wearAgain": "Wear again",
   "wardrobe.hint.rename": "Rename",
   "wardrobe.hint.update": "Update to what you're wearing now",
   "wardrobe.hint.delete": "Delete",

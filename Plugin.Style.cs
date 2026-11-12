@@ -174,9 +174,10 @@ public sealed partial class Plugin
     // `enabled` (optional): a disabled pill keeps its geometry, swallows the click and is RECESSED (rule 22).
     // `onHover` (optional): reports hover enter/leave (the OUTFITS caption hint names the hovered action).
     // `onRefused` (optional): runs instead of `onClick` when a click lands while disabled (the confirm misclick guard).
+    // `hoverFill` (optional): the hovered fill; default = the house hover mix over `fill`.
     private HudElement PillButton(Func<string> label, Func<ColorRgba> fill, Func<ColorRgba> text, Action onClick,
         float labelW, float height, int fontSize, float padX, Func<ColorRgba> surface, Func<bool>? enabled = null,
-        Action<bool>? onHover = null, Action? onRefused = null)
+        Action<bool>? onHover = null, Action? onRefused = null, Func<ColorRgba>? hoverFill = null)
     {
         var hover = new HoverFlag();
         var disabled = new DisabledLabelCache();
@@ -194,7 +195,8 @@ public sealed partial class Plugin
         {
             // The recessed fill is translucent (blends over the real surface, so it fades with the window already); the
             // raised fills are opaque and faded here.
-            FillColorFn = () => !En() ? DisabledShade : Fade(hover.On ? HoverFill(fill()) : fill()),
+            FillColorFn = () => !En() ? DisabledShade
+                              : Fade(!hover.On ? fill() : hoverFill != null ? hoverFill() : HoverFill(fill())),
             CornerRadius = RoundRadius(height), PaddingX = 0f, PaddingY = 0f,
         };
     }
@@ -217,9 +219,10 @@ public sealed partial class Plugin
     private const float RowPillPadX = 4f;
 
     private HudElement RowPill(Func<string> label, Func<ColorRgba> fill, Func<ColorRgba> text, Action onClick,
-        float width, Func<bool>? enabled = null, Action<bool>? onHover = null, Action? onRefused = null)
+        float width, Func<bool>? enabled = null, Action<bool>? onHover = null, Action? onRefused = null,
+        Func<ColorRgba>? hoverFill = null)
         => PillButton(label, fill, text, onClick, width - 2f * RowPillPadX, RowPillH, 12, RowPillPadX, TileColor,
-            enabled, onHover, onRefused);
+            enabled, onHover, onRefused, hoverFill);
 
     private HudElement PrimaryRowPill(Func<string> label, Action onClick, float width, Func<bool> enabled,
         Action<bool> onHover)
@@ -249,17 +252,13 @@ public sealed partial class Plugin
         return RowPill(label, NeutralFill, () => text.Get(TextColor(), NeutralFill(), PillMinContrast), onClick, width);
     }
 
-    // A non-clickable status chip of the pill's size: bold `color` text on a 22% wash of it (the green "Worn").
-    private HudElement StatusRowChip(Func<string> label, Func<ColorRgba> color, float width) => new BubbleElement(
-        new RowElement(new HudElement[]
-        {
-            new SpacerElement(RowPillPadX, RowPillH),
-            DropBold(new TextElement(label, Color: () => color(), Width: width - 2f * RowPillPadX, Align: TextAlign.Center,
-                NoWrap: true, FontSize: 12) { Bold = true, Ellipsize = true }),
-            new SpacerElement(RowPillPadX, RowPillH),
-        }, Gap: 0.01f, Justify: RowJustify.Center))
-    {
-        FillColorFn = () => Fade(Over(color() with { A = ChipWashAlpha }, TileColor())),
-        CornerRadius = RoundRadius(RowPillH), PaddingX = 0f, PaddingY = 0f,
-    };
+    // The green "Worn" pill: bold Success text on a 22% wash of it (the old status-chip look, same 58 × 22), but
+    // PRESSABLE (rule 22): the wash is its raised fill, hover deepens the wash inside the round shape (R2), and it
+    // recesses like Wear while disabled. The click re-applies the worn outfit (the caller passes Wear's handler).
+    private const float SuccessHoverWashAlpha = 0.38f;
+
+    private HudElement SuccessRowPill(Func<string> label, Action onClick, float width, Func<bool> enabled,
+        Action<bool> onHover)
+        => RowPill(label, () => Over(SuccessColor() with { A = ChipWashAlpha }, TileColor()), SuccessColor, onClick, width,
+            enabled, onHover, hoverFill: () => Over(SuccessColor() with { A = SuccessHoverWashAlpha }, TileColor()));
 }

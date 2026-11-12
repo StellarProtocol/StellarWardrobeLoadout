@@ -125,7 +125,7 @@ public sealed partial class Plugin
 
     // ── OUTFITS caption hint slot (R12: no tooltips — the caption names the hovered action) ───────────────────────
     private const int HintNone = 0, HintWear = 1, HintRename = 2, HintUpdate = 3, HintDelete = 4,
-        HintSaveName = 5, HintCancel = 6;
+        HintSaveName = 5, HintCancel = 6, HintWearAgain = 7;
     private int _hint;
 
     // `kind` = what the hovered control does now; on leave, the hint clears if it shows any of the control's kinds
@@ -141,6 +141,7 @@ public sealed partial class Plugin
     private string OutfitsHint() => _hint switch
     {
         HintWear     => _loc.T("wardrobe.hint.wear"),
+        HintWearAgain => _loc.T("wardrobe.hint.wearAgain"),
         HintRename   => _loc.T("wardrobe.hint.rename"),
         HintUpdate   => _loc.T("wardrobe.hint.update"),
         HintDelete   => _loc.T("wardrobe.hint.delete"),

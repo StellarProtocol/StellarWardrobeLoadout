@@ -26,6 +26,7 @@
   "wardrobe.panel.preview": "プレビュー",
   "wardrobe.hint.list": "カーソルでプレビュー · ドラッグで並べ替え",
   "wardrobe.hint.wear": "着る",
+  "wardrobe.hint.wearAgain": "もう一度着る",
   "wardrobe.hint.rename": "名前を変更",
   "wardrobe.hint.update": "今着ている衣装で更新",
   "wardrobe.hint.delete": "削除",

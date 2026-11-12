@@ -26,6 +26,7 @@
   "wardrobe.panel.preview": "ตัวอย่าง",
   "wardrobe.hint.list": "ชี้เพื่อดูตัวอย่าง · ลากเพื่อจัดลำดับ",
   "wardrobe.hint.wear": "สวม",
+  "wardrobe.hint.wearAgain": "สวมอีกครั้ง",
   "wardrobe.hint.rename": "เปลี่ยนชื่อ",
   "wardrobe.hint.update": "อัปเดตเป็นชุดที่สวมอยู่ตอนนี้",
   "wardrobe.hint.delete": "ลบ",
