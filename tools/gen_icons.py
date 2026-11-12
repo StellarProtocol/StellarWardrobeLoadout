@@ -12,14 +12,17 @@ Sizes: the glyph's size in canvas units x the UI scales the game runs at (canvas
 Run (conda python, from the plugin root):  python tools/gen_icons.py
 """
 import os
+import sys
 from PIL import Image, ImageDraw
 
 SS = 8
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Icons")
 SCALES = [0.75, 1.0, 1.25, 1.5, 2.0]
 
+ARMOIRE_UNITS = 24    # header-tile glyph; launcher tile = the 128 px drawing (wardrobe-icon.png)
+
 # name -> glyph size in canvas units (what the window draws). Keep in sync with Plugin.Style.Icons.cs.
-UNITS = {"hanger": 24, "pencil": 16, "refresh": 16, "check": 16, "close": 14}
+UNITS = {"pencil": 16, "refresh": 16, "check": 16, "close": 14}
 GRIP_UNITS = (6, 14)   # w x h
 
 
@@ -69,16 +72,6 @@ class Pen:
         return out
 
 
-def hanger(n):
-    # Mockup path, moved down 2 units so the glyph sits centred in its tile (the source is top-heavy) and with a
-    # slightly larger hook so it survives the small sizes.
-    p = Pen(n)
-    p.arc(12, 6, 2.6, 90, 360)              # the hook: from straight below the centre round to its right side
-    p.line((12, 8.6), (12, 11))             # neck
-    p.line((12, 11), (3, 19), (21, 19), closed=True)
-    return p.done()
-
-
 def pencil(n):
     p = Pen(n)
     p.line((4, 20), (5, 16), (16, 5), (19, 8), (8, 19), closed=True)
@@ -120,7 +113,7 @@ def grip(w, h):
     return img
 
 
-DRAW = {"hanger": hanger, "pencil": pencil, "refresh": refresh, "check": check, "close": close}
+DRAW = {"pencil": pencil, "refresh": refresh, "check": check, "close": close}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
@@ -133,3 +126,15 @@ if __name__ == "__main__":
     for h in gsizes:
         grip(max(3, int(round(h * gw / gh))), h).save(os.path.join(OUT, f"grip-{h}.png"), optimize=True)
     print("grip", gsizes)
+    sys.dont_write_bytecode = True   # no tools/__pycache__ in the repo
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import armoire
+    src = os.path.join(OUT, "src")
+    os.makedirs(src, exist_ok=True)
+    asizes = sizes_for(ARMOIRE_UNITS)
+    for n in asizes:
+        armoire.render_png(n, os.path.join(OUT, f"armoire-{n}.png"))
+    for n in armoire.DRAWINGS:
+        armoire.write_svg(n, os.path.join(src, f"armoire-{n}.svg"))
+    armoire.render_png(128, os.path.join(OUT, "..", "wardrobe-icon.png"))
+    print("armoire", asizes, "+ launcher 128, svg", sorted(armoire.DRAWINGS))

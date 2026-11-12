@@ -7,7 +7,7 @@ namespace Stellar.WardrobeLoadout;
 
 /// <summary>
 /// The wardrobe window (house style, approved prototype 2026-11-13 <c>_scratch/prototypes/wardrobe-redesign-APPROVED</c>):
-/// a ToolHeader (hanger tile · "Wardrobe" · live status · Save current outfit · "?"), then an OUTFITS panel (the
+/// a ToolHeader (wardrobe tile · "Wardrobe" · live status · Save current outfit · "?"), then an OUTFITS panel (the
 /// drag-reorderable list) beside a PREVIEW panel (the hovered outfit on a live model), then a one-line footer for
 /// feedback / hints. Storage + apply logic live in <c>Plugin.cs</c> / <see cref="WardrobeStore"/>; this partial owns the
 /// window, its state and the 10 Hz tick. Rows: <c>Plugin.Overlay.Rows.cs</c>; root layout: <c>.Root.cs</c>; actions and

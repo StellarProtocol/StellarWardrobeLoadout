@@ -7,7 +7,7 @@ namespace Stellar.WardrobeLoadout;
 /// <summary>
 /// Overlay partial: the window root (approved prototype) —
 /// <code>
-/// [hanger tile] Wardrobe                              [ Save current outfit ] (?)
+/// [wardrobe tile] Wardrobe                              [ Save current outfit ] (?)
 ///               Wearing “X” · N outfits
 /// ┌ OUTFITS ─────────── hint ┐ ┌ PREVIEW ─────────────────── [Weapon: On] ┐
 /// │ 17 rows, drag to reorder │ │ live model (260 × 424)                     │

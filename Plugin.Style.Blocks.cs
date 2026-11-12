@@ -49,7 +49,7 @@ public sealed partial class Plugin
     }
 
     // Sizes = round(units × {0.75, 1, 1.25, 1.5, 2}) ∪ {16, 32} — keep in sync with tools/gen_icons.py.
-    private static readonly IconSet HangerIcon  = new("hanger", 24, 16, 18, 24, 30, 32, 36, 48);
+    private static readonly IconSet ArmoireIcon = new("armoire", 24, 16, 18, 24, 30, 32, 36, 48);
     private static readonly IconSet PencilIcon  = new("pencil", 16, 12, 16, 20, 24, 32);
     private static readonly IconSet RefreshIcon = new("refresh", 16, 12, 16, 20, 24, 32);
     private static readonly IconSet CheckIcon   = new("check", 16, 12, 16, 20, 24, 32);
@@ -73,7 +73,7 @@ public sealed partial class Plugin
     private static ImageElement Glyph(Func<byte[]?> png, int units, Func<ColorRgba?>? tint = null, int width = 0)
         => new(png, width > 0 ? width : units, units) { Live = true, Tint = tint };
 
-    // Launcher tile icon (clothes hanger) — the framework tints it.
+    // Launcher tile icon (the "D — Armoire" wardrobe, 128 px drawing) — the framework tints it. LauncherEntry takes one PNG.
     private static readonly byte[]? LauncherIcon = LoadEmbedded("Stellar.WardrobeLoadout.wardrobe-icon.png");
 
     private static byte[]? LoadEmbedded(string name)
@@ -90,15 +90,15 @@ public sealed partial class Plugin
     }
 
     // ── accent icon tile (ToolHeader) ─────────────────────────────────────────────────────────────────────────────
-    // A 40 px tile in the LIVE theme accent with the white hanger glyph (24 px) centred: never baked colour, so the tile
+    // A 40 px tile in the LIVE theme accent with the white wardrobe glyph (24 px) centred: never baked colour, so the tile
     // follows the theme (house "Icon tile", option A). Radius 9 at 40 px. The padding IS the margin → exactly 40 square.
     private const float ToolIconSize = 40f;
 
     private HudElement HeaderIconTile()
     {
-        float pad = (ToolIconSize - HangerIcon.Units) / 2f;
+        float pad = (ToolIconSize - ArmoireIcon.Units) / 2f;
         return new CellElement(new BubbleElement(
-            new RowElement(new HudElement[] { Glyph(HangerIcon) }, Gap: 0.01f, Justify: RowJustify.Center))
+            new RowElement(new HudElement[] { Glyph(ArmoireIcon) }, Gap: 0.01f, Justify: RowJustify.Center))
         {
             FillColorFn = () => Fade(AccentColor()), CornerRadius = 9f, PaddingX = pad, PaddingY = pad,
         }, Width: ToolIconSize);
