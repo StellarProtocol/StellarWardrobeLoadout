@@ -71,20 +71,33 @@ public sealed class WardrobeStoreTests
     }
 
     [Fact]
-    public void Move_reorders_up_and_down()
+    public void MoveTo_uses_remove_then_insert_indices()
+    {
+        var store = new WardrobeStore();
+        foreach (var n in new[] { "a", "b", "c", "d" }) store.Add("Aria", Slot(n));
+
+        Assert.True(store.MoveTo("Aria", 3, 0));   // "d" dragged to the top → becomes hotkey 1
+        Assert.Equal(new[] { "d", "a", "b", "c" }, Names(store.Get("Aria")));
+        Assert.True(store.MoveTo("Aria", 0, 3));   // and back to the bottom
+        Assert.Equal(new[] { "a", "b", "c", "d" }, Names(store.Get("Aria")));
+        Assert.True(store.MoveTo("Aria", 1, 2));   // "b" one down: `to` is its index AFTER the move
+        Assert.Equal(new[] { "a", "c", "b", "d" }, Names(store.Get("Aria")));
+    }
+
+    [Fact]
+    public void MoveTo_refuses_no_ops_out_of_range_and_unknown_characters()
     {
         var store = new WardrobeStore();
         store.Add("Aria", Slot("a"));
         store.Add("Aria", Slot("b"));
-        store.Add("Aria", Slot("c"));
 
-        Assert.True(store.Move("Aria", 2, -1));    // "c" up one
-        Assert.Equal(new[] { "a", "c", "b" }, Names(store.Get("Aria")));
-        Assert.True(store.Move("Aria", 0, +1));    // "a" down one
-        Assert.Equal(new[] { "c", "a", "b" }, Names(store.Get("Aria")));
-        Assert.False(store.Move("Aria", 0, -1));   // already first — no-op
-        Assert.False(store.Move("Aria", 2, +1));   // already last — no-op
-        Assert.False(store.Move("Aria", 9, -1));   // out of range
+        Assert.False(store.MoveTo("Aria", 1, 1));    // no-op drop
+        Assert.False(store.MoveTo("Aria", 2, 0));    // from out of range
+        Assert.False(store.MoveTo("Aria", 0, 2));    // to out of range
+        Assert.False(store.MoveTo("Aria", -1, 0));
+        Assert.False(store.MoveTo("Nobody", 0, 1));  // unknown character
+        Assert.False(store.Root.ContainsKey("Nobody"));   // … and no empty entry was created for it
+        Assert.Equal(new[] { "a", "b" }, Names(store.Get("Aria")));
     }
 
     [Fact]

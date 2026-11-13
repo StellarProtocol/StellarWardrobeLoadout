@@ -36,6 +36,13 @@ public sealed class OutfitSlot
     /// weapon look (applied as such — the game restores the default).</summary>
     public int WeaponSkinId { get; set; }
 
+    /// <summary>Which pieces this outfit keeps HIDDEN (the game's wardrobe "hide hat" toggles): region → true when
+    /// hidden, captured at save / update for every hideable region from the game's one global per-character setting
+    /// (Knowledge Base <c>Fashion-Show-Hide-State.md</c>). Null = no show/hide state saved (an outfit saved before
+    /// this existed, or the setting was unreadable at save time) — applying it then leaves the player's current
+    /// show/hide alone. Absent from older JSON, so it loads as null.</summary>
+    public Dictionary<int, bool>? Hidden { get; set; }
+
     /// <summary>Unix-ms timestamp the outfit was saved (for newest-first ordering / display).</summary>
     public long SavedAtMs { get; set; }
 

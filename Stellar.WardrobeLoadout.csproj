@@ -9,17 +9,19 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.WardrobeLoadout</RootNamespace>
     <AssemblyName>Stellar.WardrobeLoadout</AssemblyName>
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <!-- Consumes IWardrobe incl. the weapon-skin API (GetWornWeaponSkin / ApplyWeaponSkinAsync) and
-         VirtualListElement — framework 2.6.0. Requires framework 2.6.4 for IPlayerIdentity.CharId
-         (per-character outfits). -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.6.4" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
+         IPlayerIdentity.CharId (per-character outfits). 2.30.0 for the house-style window: BubbleElement fills /
+         outlines, VirtualListElement.OnReorder + FixedHeight, ImageElement.Tint, theme status colours
+         (Success / Danger / Caution), WindowSpec.TitleProvider / Prebuild, HotkeyAction.IsActive.
+         2.31.0 for IWardrobePreviewOptions (preview ShowWeapon + the outfit's own show/hide state). -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.31.0" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.31.0" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.31.0" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Lang/en.json"  LogicalName="Stellar.WardrobeLoadout.Lang.en.json" />
@@ -28,18 +30,11 @@
     <EmbeddedResource Include="Lang/id.json"  LogicalName="Stellar.WardrobeLoadout.Lang.id.json" />
     <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.WardrobeLoadout.Lang.fil.json" />
     <EmbeddedResource Include="Lang/ko.json"  LogicalName="Stellar.WardrobeLoadout.Lang.ko.json" />
-    <!-- Launcher tile icon (clothes hanger) — white+alpha, tinted by the launcher. -->
+    <!-- Launcher tile icon ("D — Armoire" wardrobe, tools/armoire.py 128 px drawing) — white+alpha, tinted by the launcher. -->
     <EmbeddedResource Include="wardrobe-icon.png" LogicalName="Stellar.WardrobeLoadout.wardrobe-icon.png" />
-    <!-- Row-action icons — one bold uniform set (white+alpha PNGs, tinted with the theme text colour by
-         the framework). The overlay font can't provide most of these cleanly at this size/weight. -->
-    <EmbeddedResource Include="Icons/edit.png"    LogicalName="Stellar.WardrobeLoadout.Icons.edit.png" />
-    <EmbeddedResource Include="Icons/save.png"    LogicalName="Stellar.WardrobeLoadout.Icons.save.png" />
-    <EmbeddedResource Include="Icons/refresh.png" LogicalName="Stellar.WardrobeLoadout.Icons.refresh.png" />
-    <EmbeddedResource Include="Icons/up.png"      LogicalName="Stellar.WardrobeLoadout.Icons.up.png" />
-    <EmbeddedResource Include="Icons/down.png"    LogicalName="Stellar.WardrobeLoadout.Icons.down.png" />
-    <EmbeddedResource Include="Icons/apply.png"   LogicalName="Stellar.WardrobeLoadout.Icons.apply.png" />
-    <EmbeddedResource Include="Icons/trash.png"   LogicalName="Stellar.WardrobeLoadout.Icons.trash.png" />
-    <EmbeddedResource Include="Icons/cancel.png"  LogicalName="Stellar.WardrobeLoadout.Icons.cancel.png" />
+    <!-- Window glyphs (armoire, pencil, refresh, check, close, grip): white flat PNGs, one pre-drawn bitmap per
+         on-screen size (tools/gen_icons.py → Icons/<name>-<px>.png), tinted with theme colours at draw time. -->
+    <EmbeddedResource Include="Icons/*.png" LogicalName="Stellar.WardrobeLoadout.Icons.%(Filename).png" />
   </ItemGroup>
   <!-- The unit-test project is a sibling folder under this repo root; keep its sources out of the
        plugin's default `**/*.cs` glob (else its xUnit test files + generated obj land in the plugin). -->

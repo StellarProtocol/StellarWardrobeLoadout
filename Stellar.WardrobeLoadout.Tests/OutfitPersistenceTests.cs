@@ -230,4 +230,31 @@ public sealed class OutfitPersistenceTests
         Assert.Equal(9000123, reloaded["Revette"][0].WeaponSkinId);
         Assert.Equal("Revette-52", reloaded["Revette"][52].Name);
     }
+
+    // ---- rolling backup (outfits.prev.json) --------------------------------------------------
+
+    [Fact]
+    public void Backup_is_written_when_the_save_changes_the_file()
+    {
+        var before = OutfitPersistence.Serialize(Root(("Revette", 3)));
+        var after = OutfitPersistence.Serialize(Root(("Revette", 2)));   // e.g. one outfit deleted
+        Assert.True(OutfitPersistence.ShouldBackup(before, after));
+    }
+
+    [Fact]
+    public void Backup_is_skipped_when_the_save_writes_identical_bytes()
+    {
+        // Otherwise a no-op save would overwrite the one differing backup with a copy of the live file.
+        var before = OutfitPersistence.Serialize(Root(("Revette", 3)));
+        var same = OutfitPersistence.Serialize(Root(("Revette", 3)));
+        Assert.False(OutfitPersistence.ShouldBackup(before, same));
+    }
+
+    [Fact]
+    public void Backup_is_skipped_when_there_is_no_previous_file()
+    {
+        var next = OutfitPersistence.Serialize(Root(("Revette", 1)));
+        Assert.False(OutfitPersistence.ShouldBackup(null, next));
+        Assert.False(OutfitPersistence.ShouldBackup(System.Array.Empty<byte>(), next));
+    }
 }

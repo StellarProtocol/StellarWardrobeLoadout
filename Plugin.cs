@@ -72,7 +72,11 @@ public sealed partial class Plugin : IStellarPlugin
                 new HotkeyAction(
                     Id: $"wardrobe.apply.{n}",
                     Description: _loc.TFormat("wardrobe.hotkey.apply", n),
-                    SuggestedDefault: null),
+                    SuggestedDefault: null)
+                {
+                    // Dormant outside the world (title / character select): the key then reaches the game untouched.
+                    IsActive = () => _services.ClientState.Phase == GamePhase.World,
+                },
                 callback: () => OnApply(n));
         }
 
@@ -80,7 +84,10 @@ public sealed partial class Plugin : IStellarPlugin
             new HotkeyAction(
                 Id: "wardrobe.window.toggle",
                 Description: _loc.T("wardrobe.hotkey.windowToggle"),
-                SuggestedDefault: null),
+                SuggestedDefault: null)
+            {
+                IsActive = () => _services.ClientState.Phase == GamePhase.World,
+            },
             callback: ToggleOverlay);
 
         InitOverlay();
@@ -102,18 +109,32 @@ public sealed partial class Plugin : IStellarPlugin
     // A stable per-character key: the game's char id. Null until it resolves (title / character select /
     // just after logout) — every store op is a no-op under a null key (never write outfits under an
     // unknown character; the old name/"default" fallback is gone — it collided across accounts).
-    private string? CharacterKey => _services.PlayerState.CharId != 0 ? _services.PlayerState.CharId.ToString() : null;
+    // The key string is cached per char id: the window's row Funcs read it many times per refresh, and a fresh
+    // ToString() each time was a per-poll allocation (Plugin-Performance-Rules §2).
+    private string? CharacterKey
+    {
+        get
+        {
+            var id = _services.PlayerState.CharId;
+            if (id == 0) return null;
+            if (id != _charKeyId || _charKey is null) { _charKeyId = id; _charKey = id.ToString(); }
+            return _charKey;
+        }
+    }
+
+    private long _charKeyId;
+    private string? _charKey;
 
     // Char ids whose one-time name→char-id migration has already been attempted this session (see
     // TryMigrateNameToCharId). Per-CHARACTER, not per-session: a character with nothing to migrate must
     // never block a LATER character that DOES have name-keyed outfits — the earlier per-session bool let
-    // a first-seen character (e.g. Rawita, no outfits) latch it so Revette never migrated. Ticked from
-    // the framework Update hook.
+    // a first-seen character with no outfits latch it so the next character never migrated. Ticked from
+    // the overlay's 10 Hz IFramework.Every tick (Plugin.Overlay.cs) — there is no char-changed event.
     private readonly HashSet<string> _migratedChars = new();
 
     // Runs once PER CHARACTER, the first time that character's id resolves: copies any outfits still
     // sitting under the legacy name key (or "default") onto the char-id key, keeping the legacy key for
-    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every frame — short-circuits on the
+    // rollback (see WardrobeStore.MigrateNameToCharId). Cheap to call every tick — short-circuits on the
     // per-char set, and the store's own idempotency means a re-attempt can never duplicate an
     // already-migrated char-id entry.
     private void TryMigrateNameToCharId()
@@ -175,12 +196,14 @@ public sealed partial class Plugin : IStellarPlugin
         }
 
         DiagApplying(slot);
+        _switchingSlot = slot;   // header "Switching to …" + every Wear pill recessed until EndSwitch
+        Repaint();
         _ = ApplyAndReportAsync(slot);
     }
 
-    // Outfit first, THEN (only on success) the saved weapon skin. The two share the game's single
-    // apply-in-flight slot, so the outfit switch must be awaited before the skin RPC goes out; a failed
-    // outfit switch sends no skin at all (the player keeps the look they had).
+    // Outfit first, THEN (only on success) the saved weapon skin, then the saved show/hide state. The outfit
+    // and the skin share the game's single apply-in-flight slot, so the outfit switch must be awaited before
+    // the skin RPC goes out; a failed outfit switch sends neither (the player keeps the look they had).
     private async Task ApplyAndReportAsync(OutfitSlot slot)
     {
         try
@@ -192,6 +215,14 @@ public sealed partial class Plugin : IStellarPlugin
                 weapon = await _services.Wardrobe
                     .ApplyWeaponSkinAsync(slot.WeaponProfessionId, slot.WeaponSkinId).ConfigureAwait(false);
             }
+            // Then the outfit's saved show/hide state, under the same success gate. The await resumed off the main
+            // thread and ILua is main-thread only, so it hops back; the table literal is built here (pure string work).
+            if (WardrobeRules.ShouldSendHidden(result == WardrobeResult.Success, slot))
+            {
+                var name = slot.Name;
+                var table = WardrobeRules.FormatHideTable(slot.Hidden!);
+                _services.Framework.Post(() => SendHiddenState(name, table));
+            }
             Report(slot, result, weapon);
         }
         catch (Exception ex)
@@ -201,6 +232,8 @@ public sealed partial class Plugin : IStellarPlugin
         finally
         {
             Interlocked.Exchange(ref _inFlight, 0);
+            // The await resumes off the main thread (ConfigureAwait(false)); window state changes hop back first.
+            _services.Framework.Post(EndSwitch);
         }
     }
 
@@ -211,9 +244,11 @@ public sealed partial class Plugin : IStellarPlugin
         var weaponNote = weapon is { } w ? w.ToString()
             : slot.HasWeaponSkin() ? "not sent" : "none";
         _services.Log.Info(
-            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote})");
+            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote}; show/hide -> {HiddenNote(slot, result == WardrobeResult.Success)})");
         if (result == WardrobeResult.Success)
         {
+            // Worn tie-break + show/hide cache (main thread; posted after SendHiddenState, so it runs after the write).
+            _services.Framework.Post(() => OnApplySucceeded(slot));
             Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.applied", slot.Name));
             if (weapon is { } wr && wr != WardrobeResult.Success)
             {
@@ -223,13 +258,14 @@ public sealed partial class Plugin : IStellarPlugin
         else if (result is WardrobeResult.Rejected or WardrobeResult.InCombat or WardrobeResult.Timeout)
         {
             // The game toasts the specific reason (combat lock, etc.) itself; this is the plugin's
-            // own coarse failure note so a no-op click isn't silent.
+            // own coarse failure note so a no-op click isn't silent — plus the row flash + footer (main thread).
             Toast(NoticeTipType.RedBar, _loc.TFormat("wardrobe.toast.applyFailed", slot.Name));
+            _services.Framework.Post(() => OnApplyFailed(slot));
         }
     }
 
-    // Everything a saved outfit captures, in one read: the worn pieces, their per-area dyes, and the
-    // class's weapon skin. Returns null when there is nothing to save (wardrobe read not ready, or an
+    // Everything a saved outfit captures, in one read: the worn pieces, their per-area dyes, the
+    // class's weapon skin, and which pieces are hidden. Returns null when there is nothing to save (wardrobe read not ready, or an
     // all-zero worn map) — the ONE definition of "empty capture", shared by save and update. The name is
     // the caller's business (a new save names it; an update keeps the existing name).
     private OutfitSlot? CaptureCurrent()
@@ -246,6 +282,7 @@ public sealed partial class Plugin : IStellarPlugin
             DyeAreas = CaptureDyeAreas(),
             WeaponProfessionId = weapon?.ProfessionId ?? 0,
             WeaponSkinId = weapon?.SkinId ?? 0,
+            Hidden = ReadHiddenState(),   // null when unreadable: the save still goes ahead, without a show/hide state
             SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
     }
@@ -265,6 +302,8 @@ public sealed partial class Plugin : IStellarPlugin
         captured.Name = _loc.TFormat("wardrobe.window.defaultName", _store.Get(key).Count + 1);
         _store.Add(key, captured);
         Persist();
+        var count = _store.Get(key).Count;
+        LogChange($"saved '{captured.Name}' as slot {count} ({count} outfits) for {key}");
         DiagSaved(captured, key);
         Toast(NoticeTipType.GreenBar, _loc.TFormat("wardrobe.toast.saved", captured.Name));
         return true;
@@ -341,8 +380,29 @@ public sealed partial class Plugin : IStellarPlugin
         }
     }
 
+    // Runs only on user actions (save / rename / update / delete / move) and the one-time migration — never per frame —
+    // so the extra read for the rolling backup costs nothing that matters.
     private void Persist()
-        => _services.Data.Write(OutfitPersistence.FileName, OutfitPersistence.Serialize(_store.Root));
+    {
+        var next = OutfitPersistence.Serialize(_store.Root);
+        BackupPrevious(next);
+        _services.Data.Write(OutfitPersistence.FileName, next);
+    }
+
+    // Keep the outgoing content as outfits.prev.json (one version only) when this write changes it. Best-effort: a
+    // failed backup must never block the save itself.
+    private void BackupPrevious(byte[] next)
+    {
+        try
+        {
+            var prev = _services.Data.Read(OutfitPersistence.FileName);
+            if (OutfitPersistence.ShouldBackup(prev, next)) _services.Data.Write(OutfitPersistence.PrevFileName, prev!);
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Warning($"[WardrobeLoadout] {OutfitPersistence.PrevFileName} backup failed: {ex.Message}");
+        }
+    }
 
     private void Toast(NoticeTipType type, string content)
         => _services.NoticeTips.Create(type).WithContent(content).Show();

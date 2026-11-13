@@ -115,10 +115,39 @@ public sealed class WardrobeRulesTests
         Assert.False(slot.Regions.ContainsKey(WeaponSkinPreviewRegion));   // the saved outfit is untouched
     }
 
+    private static Dictionary<int, int> Map(params (int Region, int Id)[] pieces)
+    {
+        var m = new Dictionary<int, int>();
+        foreach (var (r, id) in pieces) m[r] = id;
+        return m;
+    }
+
+    private static bool Matches(Dictionary<int, int> saved, Dictionary<int, int> worn)
+        => WardrobeRules.MatchesWorn(saved, worn, WardrobeRules.CountNonZero(worn));
+
+    [Fact]
+    public void Worn_matches_when_the_non_zero_pieces_are_identical()
+    {
+        // A saved map lists empty regions as 0; the worn map may omit them or list them. Both match.
+        Assert.True(Matches(Map((701, 55), (702, 10), (703, 0)), Map((701, 55), (702, 10))));
+        Assert.True(Matches(Map((701, 55), (702, 10)), Map((701, 55), (702, 10), (704, 0))));
+    }
+
+    [Fact]
+    public void Worn_does_not_match_another_piece_an_extra_piece_a_missing_piece_or_nothing()
+    {
+        Assert.False(Matches(Map((701, 55), (702, 10)), Map((701, 55), (702, 11))));   // another piece
+        Assert.False(Matches(Map((701, 55)), Map((701, 55), (702, 10))));              // worn has one more
+        Assert.False(Matches(Map((701, 55), (702, 10)), Map((701, 55))));              // saved has one more
+        Assert.False(Matches(Map((701, 0)), Map((701, 0))));                           // nothing on at all
+    }
+
     [Theory]
-    [InlineData(1.0f, 33f)]    // 11      → 11 + 12 + 8 + 2
-    [InlineData(0.8f, 31f)]    // 8.8     → 9  + 12 + 8 + 2   (slider minimum)
-    [InlineData(1.4f, 37f)]    // 15.4    → 15 + 12 + 8 + 2   (slider maximum, rounds DOWN)
-    public void RowHeightFor_matches_the_measured_row_pitch(float fontScale, float expected)
-        => Assert.Equal(expected, WardrobeRules.RowHeightFor(fontScale));
+    [InlineData("F1", false, false, false, "F1")]
+    [InlineData("Alpha2", true, false, false, "Ctrl+2")]
+    [InlineData("Keypad3", false, false, false, "Num3")]
+    [InlineData("F12", true, true, true, "Ctrl+Shift+Alt+F12")]
+    [InlineData("A", false, false, true, "Alt+A")]
+    public void ShortKeyLabel_shortens_number_row_and_keypad_keys(string key, bool ctrl, bool shift, bool alt, string expected)
+        => Assert.Equal(expected, WardrobeRules.ShortKeyLabel(key, ctrl, shift, alt));
 }
