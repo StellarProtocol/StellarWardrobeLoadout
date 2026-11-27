@@ -217,6 +217,7 @@ public sealed partial class Plugin
     private void OnTick()
     {
         TryMigrateNameToCharId();
+        TickDyeScheme();   // a dye-scheme restore's result poll (one null check while idle) — the window may be closed
         if (_window is not { IsShown: true }) return;
 
         float now = _services.Framework.TimeNow;

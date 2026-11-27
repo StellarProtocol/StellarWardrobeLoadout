@@ -10,6 +10,7 @@
   "wardrobe.toast.applied": "Switched to \"{0}\"",
   "wardrobe.toast.applyFailed": "Couldn't apply \"{0}\"",
   "wardrobe.toast.weaponFailed": "Couldn't apply the weapon skin for \"{0}\"",
+  "wardrobe.toast.dyeSchemeMissing": "Some colours of \"{0}\" couldn't be restored — no matching Dyeing Scheme",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "Save current outfit",
   "wardrobe.window.wear": "Wear",
@@ -60,5 +61,5 @@
   "wardrobe.empty.title": "No saved outfits yet",
   "wardrobe.empty.body": "Dress up in game, then press “Save current outfit”.",
   "wardrobe.help.label": "Help",
-  "wardrobe.help.body": "Save the outfit you're wearing, then switch to it with Wear or a hotkey. The first 8 outfits have hotkeys; set the keys in Settings › Hotkeys. Drag a row to change its place. Each outfit also remembers your class's weapon skin and which pieces are hidden. Outfits are saved per character."
+  "wardrobe.help.body": "Save the outfit you're wearing, then switch to it with Wear or a hotkey. The first 8 outfits have hotkeys; set the keys in Settings › Hotkeys. Each outfit also remembers your weapon skin, hidden pieces and colours (restored free from a matching Dyeing Scheme; a piece with no match keeps its colour). Outfits are saved per character."
 }
