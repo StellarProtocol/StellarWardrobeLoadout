@@ -61,5 +61,5 @@
   "wardrobe.empty.title": "Wala pang naka-save na kasuotan",
   "wardrobe.empty.body": "Magbihis sa loob ng game, tapos pindutin ang “I-save ang suot”.",
   "wardrobe.help.label": "Tulong",
-  "wardrobe.help.body": "I-save ang kasuotang suot mo, tapos lumipat dito gamit ang Isuot o ang hotkey. May hotkey ang unang 8 kasuotan; i-set ang mga key sa Settings › Hotkeys. I-drag ang row para palitan ang puwesto nito. Naaalala rin ng bawat kasuotan ang weapon skin ng klase mo at kung aling mga piraso ang nakatago. Naka-save ang mga kasuotan kada karakter."
+  "wardrobe.help.body": "I-save ang kasuotang suot mo, tapos lumipat dito gamit ang Isuot o ang hotkey. May hotkey ang unang 8 kasuotan; i-set ang mga key sa Settings › Hotkeys. Naaalala rin ng bawat kasuotan ang weapon skin, mga nakatagong piraso at mga kulay (libreng naibabalik mula sa tugmang Dyeing Scheme; ang pirasong walang tugma ay mananatili sa kulay nito). Naka-save ang mga kasuotan kada karakter."
 }
