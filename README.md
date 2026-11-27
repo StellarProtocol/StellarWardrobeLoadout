@@ -7,6 +7,17 @@ menu.
 Source repo. Built and deployed through the StellarResonance DevKit; consumed via
 `Stellar.Abstractions` only.
 
+## What an outfit remembers
+
+- The pieces you are wearing, one per wardrobe slot.
+- Your class's weapon skin.
+- Which pieces are hidden (the game's show/hide toggles).
+- The exact colours of every piece. When you wear the outfit, each piece whose colour changed since is
+  put back by applying the matching **Dyeing Scheme** you stored on that piece in the game (free). A
+  piece with no matching Dyeing Scheme keeps its current colour, and you get one notice. The plugin
+  never dyes for you, because dyeing costs currency. Outfits saved before this feature keep their
+  colours as they are until you save or update them again.
+
 ## Where your outfits are stored
 
 Saved outfits are **user data**, so they live in the plugin's own data store —
