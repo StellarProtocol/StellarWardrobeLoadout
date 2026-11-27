@@ -10,6 +10,7 @@
   "wardrobe.toast.applied": "Nailipat sa \"{0}\"",
   "wardrobe.toast.applyFailed": "Hindi ma-apply ang \"{0}\"",
   "wardrobe.toast.weaponFailed": "Hindi ma-apply ang weapon skin ng \"{0}\"",
+  "wardrobe.toast.dyeSchemeMissing": "Hindi naibalik ang ilang kulay ng \"{0}\" — walang tugmang Dyeing Scheme",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "I-save ang suot",
   "wardrobe.window.wear": "Isuot",

@@ -10,6 +10,7 @@
   "wardrobe.toast.applied": "전환됨: \"{0}\"",
   "wardrobe.toast.applyFailed": "적용할 수 없습니다: \"{0}\"",
   "wardrobe.toast.weaponFailed": "무기 스킨을 적용할 수 없습니다: \"{0}\"",
+  "wardrobe.toast.dyeSchemeMissing": "\"{0}\"의 일부 색상을 복원할 수 없습니다 — 일치하는 염색 프리셋이 없습니다",
   "wardrobe.window.title": "옷장",
   "wardrobe.window.saveCurrent": "현재 의상 저장",
   "wardrobe.window.wear": "착용",

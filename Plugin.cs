@@ -33,7 +33,8 @@ namespace Stellar.WardrobeLoadout;
 /// construct; that key is then LEFT IN PLACE, frozen and never rewritten, so rolling back to a
 /// pre-migration build still finds them (process rules § 6). Plugindata always wins on a later return
 /// to this build. Apply success/failure is toasted by the GAME itself; this plugin toasts only its own
-/// guard messages (API-not-ready, empty slot, switch-in-flight, nothing-to-save, weapon-skin-failed)
+/// guard messages (API-not-ready, empty slot, switch-in-flight, nothing-to-save, weapon-skin-failed,
+/// dye-scheme-missing)
 /// and logs outcomes.</para>
 /// </summary>
 public sealed partial class Plugin : IStellarPlugin
@@ -223,6 +224,14 @@ public sealed partial class Plugin : IStellarPlugin
                 var table = WardrobeRules.FormatHideTable(slot.Hidden!);
                 _services.Framework.Post(() => SendHiddenState(name, table));
             }
+            // Then the exact dye, through the game's free Dyeing Scheme (Plugin.DyeScheme.cs), same gate; posted after the
+            // show/hide write so the main thread runs them in that order. Its per-piece outcome is logged + toasted later.
+            if (DyeSchemeRules.ShouldSendDyeSchemes(result == WardrobeResult.Success, slot)
+                && DyeSchemeRules.FormatPieces(slot.DyeColors!) is { } pieces)
+            {
+                var name = slot.Name;
+                _services.Framework.Post(() => SendDyeSchemes(name, pieces));
+            }
             Report(slot, result, weapon);
         }
         catch (Exception ex)
@@ -244,7 +253,7 @@ public sealed partial class Plugin : IStellarPlugin
         var weaponNote = weapon is { } w ? w.ToString()
             : slot.HasWeaponSkin() ? "not sent" : "none";
         _services.Log.Info(
-            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote}; show/hide -> {HiddenNote(slot, result == WardrobeResult.Success)})");
+            $"[WardrobeLoadout] apply '{slot.Name}' -> {result} (weapon skin {slot.WeaponProfessionId}/{slot.WeaponSkinId} -> {weaponNote}; show/hide -> {HiddenNote(slot, result == WardrobeResult.Success)}; dye -> {DyeNote(slot, result == WardrobeResult.Success)})");
         if (result == WardrobeResult.Success)
         {
             // Worn tie-break + show/hide cache (main thread; posted after SendHiddenState, so it runs after the write).
@@ -283,6 +292,7 @@ public sealed partial class Plugin : IStellarPlugin
             WeaponProfessionId = weapon?.ProfessionId ?? 0,
             WeaponSkinId = weapon?.SkinId ?? 0,
             Hidden = ReadHiddenState(),   // null when unreadable: the save still goes ahead, without a show/hide state
+            DyeColors = ReadDyeColors(worn),   // likewise null when unreadable: wearing it then leaves colours alone
             SavedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
     }

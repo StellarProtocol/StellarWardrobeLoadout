@@ -10,6 +10,7 @@
   "wardrobe.toast.applied": "「{0}」に切り替えました",
   "wardrobe.toast.applyFailed": "「{0}」を適用できませんでした",
   "wardrobe.toast.weaponFailed": "「{0}」の武器スキンを適用できませんでした",
+  "wardrobe.toast.dyeSchemeMissing": "「{0}」の一部の色を復元できませんでした — 一致する染色プランがありません",
   "wardrobe.window.title": "ワードローブ",
   "wardrobe.window.saveCurrent": "現在の衣装を保存",
   "wardrobe.window.wear": "着る",

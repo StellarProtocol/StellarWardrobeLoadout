@@ -10,6 +10,7 @@
   "wardrobe.toast.applied": "Beralih ke \"{0}\"",
   "wardrobe.toast.applyFailed": "Tidak bisa menerapkan \"{0}\"",
   "wardrobe.toast.weaponFailed": "Tidak bisa menerapkan skin senjata untuk \"{0}\"",
+  "wardrobe.toast.dyeSchemeMissing": "Beberapa warna \"{0}\" tidak bisa dipulihkan — tidak ada Skema Pewarnaan yang cocok",
   "wardrobe.window.title": "Wardrobe",
   "wardrobe.window.saveCurrent": "Simpan yang dipakai",
   "wardrobe.window.wear": "Pakai",
