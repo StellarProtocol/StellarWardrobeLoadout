@@ -66,6 +66,7 @@ public sealed class WardrobeStore
         slot.WeaponProfessionId = captured.WeaponProfessionId;
         slot.WeaponSkinId = captured.WeaponSkinId;
         slot.Hidden = captured.Hidden;   // null when the setting was unreadable at capture time (then applying leaves show/hide alone)
+        slot.DyeColors = captured.DyeColors;   // likewise null when unreadable (then applying leaves the colours alone)
         slot.SavedAtMs = captured.SavedAtMs;
         return true;
     }
@@ -123,6 +124,9 @@ public sealed class WardrobeStore
         WeaponProfessionId = slot.WeaponProfessionId,
         WeaponSkinId = slot.WeaponSkinId,
         Hidden = slot.Hidden is null ? null : new Dictionary<int, bool>(slot.Hidden),
+        DyeColors = slot.DyeColors?.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.ToDictionary(a => a.Key, a => (int[])a.Value.Clone())),
         SavedAtMs = slot.SavedAtMs,
     };
 }

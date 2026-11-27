@@ -43,6 +43,16 @@ public sealed class OutfitSlot
     /// show/hide alone. Absent from older JSON, so it loads as null.</summary>
     public Dictionary<int, bool>? Hidden { get; set; }
 
+    /// <summary>The EXACT worn dye of every piece, as the game itself represents it: fashionId → (<c>EFashionColorAreaType</c>
+    /// area 1..16 → HSV ints [h 0..360, s 0..100, v 0..100]), read at save / update from
+    /// <c>fashion_data:GetServerFashionAllColor(fashionId)</c> — the same table the game's dye panel hands
+    /// <c>FashionVM.GetSameStorePlanColorData</c>. Keyed by fashionId (not region) because the game's Dyeing Scheme books
+    /// are per piece. An empty area map = the piece wears its default colours. Wearing the outfit re-applies a matching
+    /// stored Dyeing Scheme (free) per piece (Knowledge Base <c>Fashion-Dye-Areas.md</c> "Dyeing Scheme"). Null = no exact
+    /// dye recorded (saved before this existed, or unreadable at save time) — wearing it then leaves every piece's colour
+    /// alone, as before. <see cref="DyeAreas"/> (approximate RGB) stays the preview source. Absent from older JSON.</summary>
+    public Dictionary<int, Dictionary<int, int[]>>? DyeColors { get; set; }
+
     /// <summary>Unix-ms timestamp the outfit was saved (for newest-first ordering / display).</summary>
     public long SavedAtMs { get; set; }
 
